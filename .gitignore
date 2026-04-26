@@ -1,2 +1,4 @@
-/cdb/*  
+/cdb/*
 .DS_Store
+.pio/
+.claude/
