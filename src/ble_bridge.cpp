@@ -10,7 +10,9 @@
 #define NUS_RX_UUID      "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define NUS_TX_UUID      "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
 
-static const size_t RX_CAP = 2048;
+// 4KB matches the desktop's max event payload (REFERENCE.md). Under burst
+// the ring needs to hold one full line in flight while loop() drains it.
+static const size_t RX_CAP = 4096;
 static uint8_t  rxBuf[RX_CAP];
 static volatile size_t rxHead = 0;
 static volatile size_t rxTail = 0;

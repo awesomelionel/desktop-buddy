@@ -109,14 +109,22 @@ void setup() {
 }
 
 void loop() {
-    static char lineBuf[1024];
+    // Snapshot lines can carry an `entries[]` transcript array; REFERENCE.md
+    // caps event payloads at 4KB. 4096 + 1 for the null terminator gives us
+    // exactly the max wire size with no headroom games.
+    static char lineBuf[4097];
     static size_t lineLen = 0;
+    static bool   lineOverflow = false;
 
     while (ble_available()) {
         int c = ble_read();
         if (c < 0) break;
         if (c == '\n' || c == '\r') {
-            if (lineLen > 0) {
+            if (lineOverflow) {
+                Serial.printf("[rx] line overflow (>%u bytes), dropped\n",
+                              (unsigned)sizeof(lineBuf) - 1);
+                lineOverflow = false;
+            } else if (lineLen > 0) {
                 lineBuf[lineLen] = 0;
                 if (lineBuf[0] == '{') {
                     if (protocol_parse_line(lineBuf, &status)) {
@@ -124,10 +132,14 @@ void loop() {
                         Serial.printf("[rx] %s\n", lineBuf);
                     }
                 }
-                lineLen = 0;
             }
+            lineLen = 0;
         } else if (lineLen < sizeof(lineBuf) - 1) {
             lineBuf[lineLen++] = (char)c;
+        } else {
+            // Past the buffer — keep eating until we see a newline so the next
+            // line starts clean. Don't try to parse a truncated payload.
+            lineOverflow = true;
         }
     }
 
@@ -151,6 +163,8 @@ void loop() {
                 currentState = recheck;
                 render();
                 lastDrawnState = recheck;
+                strncpy(lastDrawnMsg, status.msg, sizeof(lastDrawnMsg) - 1);
+                lastDrawnMsg[sizeof(lastDrawnMsg) - 1] = 0;
             }
         }
     }
