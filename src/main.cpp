@@ -7,10 +7,10 @@
 #include "protocol.h"
 #include "state.h"
 
-// 1.14" Reverse TFT Feather: 240x135 native, 135x240 in rotation 0 (portrait).
+// 1.14" Reverse TFT Feather: 240x135 native landscape, rotation 1 = 90° clockwise.
 static Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
-static const int W = 135;
-static const int H = 240;
+static const int W = 240;
+static const int H = 135;
 
 static char         deviceName[16] = "Claude";
 static ClaudeStatus status         = {};
@@ -41,7 +41,7 @@ static void initDisplay() {
     digitalWrite(TFT_I2C_POWER, HIGH);
     delay(10);
     tft.init(135, 240);
-    tft.setRotation(0);
+    tft.setRotation(1);
     tft.fillScreen(ST77XX_BLACK);
     tft.setTextWrap(false);
 }
@@ -55,30 +55,30 @@ static void render() {
     const char* name = state_name(currentState);
     int16_t  x1, y1; uint16_t tw, th;
     tft.getTextBounds(name, 0, 0, &x1, &y1, &tw, &th);
-    tft.setCursor((W - (int)tw) / 2, 70);
+    tft.setCursor((W - (int)tw) / 2, 20);
     tft.print(name);
 
     // Counts row.
     tft.setTextSize(1);
     tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
-    tft.setCursor(8, 130);
+    tft.setCursor(8, 62);
     tft.printf("total %u  run %u  wait %u",
                status.total, status.running, status.waiting);
 
-    // Last msg, wrapped manually to ~22 chars per line, two lines max.
+    // Last msg, wrapped manually to ~34 chars per line, two lines max.
     tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
     if (status.msg[0]) {
-        tft.setCursor(8, 160);
-        tft.printf("%.22s", status.msg);
-        if (strlen(status.msg) > 22) {
-            tft.setCursor(8, 172);
-            tft.printf("%.22s", status.msg + 22);
+        tft.setCursor(8, 80);
+        tft.printf("%.34s", status.msg);
+        if (strlen(status.msg) > 34) {
+            tft.setCursor(8, 92);
+            tft.printf("%.34s", status.msg + 34);
         }
     }
 
     // Footer: device name + link state.
     tft.setTextColor(isLive() ? ST77XX_GREEN : ST77XX_RED, ST77XX_BLACK);
-    tft.setCursor(8, 220);
+    tft.setCursor(8, 118);
     tft.print(isLive() ? "LIVE  " : "OFFLN ");
     tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
     tft.print(deviceName);
@@ -95,10 +95,10 @@ void setup() {
     // would otherwise stay black.
     tft.setTextSize(2);
     tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-    tft.setCursor(8, 100);
+    tft.setCursor(48, 52);
     tft.print("claude buddy");
     tft.setTextSize(1);
-    tft.setCursor(8, 130);
+    tft.setCursor(48, 72);
     tft.print(deviceName);
 
     ble_init(deviceName);
