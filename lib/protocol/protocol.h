@@ -2,12 +2,20 @@
 #include <stdint.h>
 #include <stddef.h>
 
+struct ClaudePrompt {
+    bool present;
+    char id[24];
+    char tool[16];
+    char hint[64];
+};
+
 struct ClaudeStatus {
-    uint8_t total;
-    uint8_t running;
-    uint8_t waiting;
-    char    msg[32];
-    bool    valid;        // true once at least one snapshot has parsed
+    uint8_t      total;
+    uint8_t      running;
+    uint8_t      waiting;
+    char         msg[32];
+    bool         valid;        // true once at least one snapshot has parsed
+    ClaudePrompt prompt;
 };
 
 // Parse one newline-stripped JSON object from the bridge into `out`.
