@@ -87,7 +87,7 @@ Parsing rules:
 - On a snapshot **with** `prompt`: copy `id` / `tool` / `hint` into the fixed buffers (truncating safely), set `prompt.present = true`.
 - On a snapshot **without** `prompt`: set `prompt.present = false`.
 - On a non-snapshot line (acks, time-sync, owner): leave `prompt` untouched. This prevents an ack reply from accidentally clearing an active prompt.
-- If `prompt` is present but missing `id`, or `id` would need to be truncated: set `prompt.present = false` and log to serial. Echoing back a truncated id would silently no-op on the desktop side.
+- If `prompt` is present but missing `id`, or `id` would need to be truncated: set `prompt.present = false`. Echoing back a truncated id would silently no-op on the desktop side. The drop is silent at the parser layer to keep `lib/protocol` Arduino-free and host-testable; if diagnostic visibility is later needed, log it from `main.cpp` (which has `Serial`) when it observes `prompt.present == false` after a snapshot that contained a `prompt` object — but that downstream signal isn't available to it today, so currently a malformed prompt produces no log line. Acceptable trade-off for the test surface.
 - `hint` is sanitized on copy — `\r`/`\n` and any non-printable bytes are replaced with `?` so the wrap routine can operate on plain ASCII.
 
 ### `lib/prompt_ui` — selection state machine (new, host-testable)
@@ -224,7 +224,7 @@ y=135
 - **Held at boot.** Debouncer's first call records observed state as starting state; no event fires until release-then-press.
 - **GPIO floating.** Pull-ups configured at init; failure mode is "no events emitted", not spurious presses.
 - **Snapshot missing `prompt`.** `present=false`. UI hides if visible.
-- **Snapshot prompt missing `id` or id too long.** `present=false`, log to serial. UI does not open.
+- **Snapshot prompt missing `id` or id too long.** `present=false` (silently — parser stays Arduino-free; see Architecture › lib/protocol). UI does not open.
 - **Same `prompt.id` re-arrives.** No state reset. If previously dismissed, stays hidden.
 - **New `prompt.id` while a different one is on screen.** Replace: switch id, reset highlight to APPROVE, clear flash.
 - **`last_dismissed_id` persistence.** RAM only. Cleared on reboot; desktop will only re-send a still-pending prompt anyway.
