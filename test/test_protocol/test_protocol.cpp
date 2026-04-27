@@ -52,6 +52,67 @@ static void test_parse_truncates_long_msg(void) {
     TEST_ASSERT_EQUAL_size_t(sizeof(s.msg) - 1, strlen(s.msg));
 }
 
+static void test_parse_prompt_full(void) {
+    ClaudeStatus s = {};
+    bool ok = protocol_parse_line(
+        "{\"total\":1,\"running\":0,\"waiting\":1,\"prompt\":"
+        "{\"id\":\"req_abc123\",\"tool\":\"Bash\",\"hint\":\"rm -rf /tmp/foo\"}}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_TRUE(s.prompt.present);
+    TEST_ASSERT_EQUAL_STRING("req_abc123", s.prompt.id);
+    TEST_ASSERT_EQUAL_STRING("Bash", s.prompt.tool);
+    TEST_ASSERT_EQUAL_STRING("rm -rf /tmp/foo", s.prompt.hint);
+}
+
+static void test_parse_snapshot_without_prompt_clears(void) {
+    ClaudeStatus s = {};
+    s.prompt.present = true;
+    strcpy(s.prompt.id, "req_old");
+    bool ok = protocol_parse_line("{\"total\":1,\"running\":1,\"waiting\":0}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_FALSE(s.prompt.present);
+}
+
+static void test_parse_non_snapshot_does_not_clear_prompt(void) {
+    ClaudeStatus s = {};
+    s.prompt.present = true;
+    strcpy(s.prompt.id, "req_keep");
+    // An ack-shaped JSON (no `total` field) should leave prompt alone.
+    bool ok = protocol_parse_line("{\"ack\":\"name\",\"ok\":true}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_TRUE(s.prompt.present);
+    TEST_ASSERT_EQUAL_STRING("req_keep", s.prompt.id);
+}
+
+static void test_parse_prompt_missing_id_drops(void) {
+    ClaudeStatus s = {};
+    bool ok = protocol_parse_line(
+        "{\"total\":1,\"prompt\":{\"tool\":\"Bash\",\"hint\":\"x\"}}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_FALSE(s.prompt.present);
+}
+
+static void test_parse_prompt_id_too_long_drops(void) {
+    // sizeof(id) == 24, so 23 chars is the longest that fits with NUL.
+    // Send 30 chars → must NOT silently truncate.
+    ClaudeStatus s = {};
+    bool ok = protocol_parse_line(
+        "{\"total\":1,\"prompt\":{\"id\":\"abcdefghijklmnopqrstuvwxyz1234\","
+        "\"tool\":\"Bash\",\"hint\":\"x\"}}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_FALSE(s.prompt.present);
+}
+
+static void test_parse_prompt_hint_sanitizes_unprintable(void) {
+    ClaudeStatus s = {};
+    bool ok = protocol_parse_line(
+        "{\"total\":1,\"prompt\":{\"id\":\"r1\",\"tool\":\"Bash\","
+        "\"hint\":\"a\\nb\\tc\"}}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_TRUE(s.prompt.present);
+    TEST_ASSERT_EQUAL_STRING("a?b?c", s.prompt.hint);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_parse_full_snapshot);
@@ -59,5 +120,11 @@ int main(int, char**) {
     RUN_TEST(test_parse_rejects_non_object);
     RUN_TEST(test_parse_rejects_malformed_json);
     RUN_TEST(test_parse_truncates_long_msg);
+    RUN_TEST(test_parse_prompt_full);
+    RUN_TEST(test_parse_snapshot_without_prompt_clears);
+    RUN_TEST(test_parse_non_snapshot_does_not_clear_prompt);
+    RUN_TEST(test_parse_prompt_missing_id_drops);
+    RUN_TEST(test_parse_prompt_id_too_long_drops);
+    RUN_TEST(test_parse_prompt_hint_sanitizes_unprintable);
     return UNITY_END();
 }
