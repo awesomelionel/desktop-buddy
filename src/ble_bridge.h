@@ -10,9 +10,14 @@
 //
 // Service: 6e400001-b5a3-f393-e0a9-e50e24dcca9e
 // RX char: 6e400002-b5a3-f393-e0a9-e50e24dcca9e (write)
-// TX char: 6e400003-b5a3-f393-e0a9-e50e24dcca9e (notify, unused in v1)
+// TX char: 6e400003-b5a3-f393-e0a9-e50e24dcca9e (notify)
 
 void   ble_init(const char* device_name);
 bool   ble_connected();
 size_t ble_available();
 int    ble_read();   // -1 if empty
+
+// Push `line` followed by '\n' out the TX characteristic via notify.
+// Returns false if not connected. Best-effort: if the notify queue is
+// full, returns false; the caller should drop, not retry.
+bool   ble_write_line(const char* line);

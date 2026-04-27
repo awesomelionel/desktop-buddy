@@ -89,3 +89,23 @@ int    ble_read() {
     rxTail = (rxTail + 1) % RX_CAP;
     return b;
 }
+
+bool ble_write_line(const char* line) {
+    if (!connected || !txChar || !line) return false;
+
+    size_t n = strlen(line);
+    // Out-of-line guard: keep payloads small. NUS over notify with
+    // setMTU(517) gives ~514 bytes per packet — our outgoing lines
+    // are well under 100 bytes.
+    if (n > 256) return false;
+
+    // Build "<line>\n" in a small stack buffer and notify in one shot.
+    char buf[260];
+    memcpy(buf, line, n);
+    buf[n]     = '\n';
+    buf[n + 1] = 0;
+
+    txChar->setValue((uint8_t*)buf, n + 1);
+    txChar->notify();
+    return true;
+}
