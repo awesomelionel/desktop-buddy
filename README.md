@@ -19,6 +19,25 @@ This is a ground-up rewrite. See `cdb/REFERENCE.md` for the wire protocol; `cdb/
 - **4 KB ring + line buffers** — handles max event payloads and MTU fragmentation cleanly
 - **30-second offline detection** — transitions to `OFFLINE` if no snapshot received within timeout
 
+### Permission Prompts
+When Claude Desktop blocks on a permission decision (`prompt` field present in a snapshot), the device switches to a full-screen decision UI:
+
+- **Three options, vertical stack:** `Approve` (top, default highlight) / `Deny` / `Dismiss`.
+- **Three onboard buttons** drive the UI — only active while a prompt is on screen:
+  - **Up (D2)** / **Down (D0)** — move highlight, no wrap-around.
+  - **Center (D1)** — confirm the highlighted option.
+- **Approve / Deny** send `{"cmd":"permission","id":"...","decision":"once"|"deny"}` over the BLE TX characteristic. **Dismiss** sends nothing — it just clears the prompt UI locally.
+- **`SENT: APPROVE` / `SENT: DENY` / `DISMISSED`** flashes for ~500 ms after a press, then the prompt UI hides.
+- **Sticky dismiss:** once a prompt id is dismissed, the UI does not re-appear for that same id even if the desktop keeps sending it. A *new* prompt id will show again.
+- **Auto-dismiss:** if the next snapshot drops the `prompt` field (someone decided elsewhere) or the link goes `OFFLINE`, the prompt UI clears immediately. Any in-flight press is discarded.
+- **Footer preserved:** the `LIVE` / `OFFLINE` badge and device name remain visible on the prompt screen so connection state is never hidden.
+
+#### Edge cases / callouts
+
+- **Press-then-disconnect race.** If the user presses a decision and the link drops within the same loop tick, the BLE write fails and the response is silently dropped. The desktop's session manager will re-prompt on the next snapshot — no retry on the device.
+- **No decision queueing.** Only one outgoing decision can be pending at a time. A second press before the first is drained overwrites it; in practice the 20 ms loop tick drains it long before another press is possible.
+- **Buttons inert outside an active prompt.** Presses while no prompt is on screen (or while the prompt is dismissed) are ignored.
+
 ### Session State Monitoring
 Receives and parses newline-delimited JSON snapshots from Claude Desktop containing:
 - Running / waiting / total session counts
@@ -51,6 +70,7 @@ Receives and parses newline-delimited JSON snapshots from Claude Desktop contain
 |---|---|
 | MCU + display | Adafruit Feather ESP32-S3 Reverse TFT (#5691) |
 | Display | 1.14" ST7789 TFT, 135×240 px |
+| Input | 3 onboard buttons — D2 (up), D0 (down), D1 (center) |
 
 ## Build & Flash
 
