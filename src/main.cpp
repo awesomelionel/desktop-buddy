@@ -4,7 +4,9 @@
 #include <esp_mac.h>
 
 #include "ble_bridge.h"
+#include "buttons.h"
 #include "eyes.h"
+#include "prompt_ui.h"
 #include "protocol.h"
 #include "state.h"
 
@@ -37,6 +39,12 @@ static uint8_t      lastEyesH = 0;
 static int16_t      lastEyesDx = 0;
 static int16_t      lastEyesBaseY = 0;
 static uint8_t      lastEyesDiscPhase = 0xFF;
+static Buttons      btns           = {};
+static PromptUi     promptUi       = {};
+static bool         lastPromptVisible    = false;
+static PromptOption lastPromptHighlight  = OPT_APPROVE;
+static char         lastPromptId[24]     = {};
+static bool         lastPromptFlashing   = false;
 
 // Treat the link as live if a snapshot arrived within the heartbeat window.
 // REFERENCE.md says the desktop sends a keepalive every 10s and to treat
@@ -96,6 +104,65 @@ static void render_status() {
     }
 
     // Footer: device name + link state.
+    tft.setTextColor(isLive() ? ST77XX_GREEN : ST77XX_RED, ST77XX_BLACK);
+    tft.setCursor(8, 118);
+    tft.print(isLive() ? "LIVE  " : "OFFLN ");
+    tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+    tft.print(deviceName);
+}
+
+static void render_prompt(const PromptView& v) {
+    tft.fillScreen(ST77XX_BLACK);
+
+    tft.setTextSize(2);
+    tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+    int16_t x1, y1; uint16_t tw, th;
+    const char* hdr = "PERMISSION?";
+    tft.getTextBounds(hdr, 0, 0, &x1, &y1, &tw, &th);
+    tft.setCursor((W - (int)tw) / 2, 2);
+    tft.print(hdr);
+
+    tft.setTextSize(1);
+    tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
+    tft.setCursor(8, 28);
+    tft.printf("Tool: %.20s", v.tool ? v.tool : "");
+
+    if (v.hint && v.hint[0]) {
+        tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+        tft.setCursor(8, 40);
+        tft.printf("%.38s", v.hint);
+        if (strlen(v.hint) > 38) {
+            tft.setCursor(8, 50);
+            tft.printf("%.38s", v.hint + 38);
+        }
+    }
+
+    tft.setTextSize(2);
+    if (v.flash_text) {
+        tft.setTextColor(v.flash_color, ST77XX_BLACK);
+        tft.getTextBounds(v.flash_text, 0, 0, &x1, &y1, &tw, &th);
+        tft.setCursor((W - (int)tw) / 2, 82);
+        tft.print(v.flash_text);
+    } else {
+        const char* labels[3] = {"Approve", "Deny", "Dismiss"};
+        const int ys[3] = {66, 82, 98};
+        for (int i = 0; i < 3; i++) {
+            bool hi = (i == (int)v.highlight);
+            if (hi) {
+                tft.fillRect(0, ys[i], W, 16, ST77XX_WHITE);
+                tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
+                tft.setCursor(8, ys[i]);
+                tft.print("> ");
+                tft.print(labels[i]);
+            } else {
+                tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+                tft.setCursor(24, ys[i]);
+                tft.print(labels[i]);
+            }
+        }
+    }
+
+    tft.setTextSize(1);
     tft.setTextColor(isLive() ? ST77XX_GREEN : ST77XX_RED, ST77XX_BLACK);
     tft.setCursor(8, 118);
     tft.print(isLive() ? "LIVE  " : "OFFLN ");
@@ -221,6 +288,9 @@ void setup() {
     pinMode(PIN_BTN_NEXT, INPUT_PULLUP);
     // D2 on this hardware is active HIGH in the deskhog setup.
     pinMode(PIN_BTN_PREV, INPUT_PULLDOWN);
+    pinMode(1, INPUT_PULLDOWN);  // D1 / center
+    buttons_init(&btns);
+    prompt_ui_init(&promptUi);
 
     // Splash before BLE comes up — BLE init takes ~1s and the screen
     // would otherwise stay black.
@@ -281,9 +351,47 @@ void loop() {
     BuddyState   next = state_derive(status, isLive());
     currentState      = next;
 
-    poll_nav(now);
+    prompt_ui_update(&promptUi, status.prompt, isLive(), now);
+    bool up_raw     = (digitalRead(2) == HIGH);
+    bool down_raw   = (digitalRead(0) == LOW);
+    bool center_raw = (digitalRead(1) == HIGH);
+    ButtonEvent ev  = buttons_step(&btns, now, up_raw, down_raw, center_raw);
+    if (ev != BTN_NONE && prompt_ui_view(&promptUi).visible) {
+        prompt_ui_button(&promptUi, ev, now);
+    }
 
-    if (currentCard == CARD_STATUS) {
+    char outBuf[96];
+    if (prompt_ui_take_outgoing(&promptUi, outBuf, sizeof(outBuf))) {
+        if (!ble_write_line(outBuf)) {
+            Serial.printf("[tx] dropped (not connected): %s\n", outBuf);
+        } else {
+            Serial.printf("[tx] %s\n", outBuf);
+        }
+    }
+
+    PromptView pv = prompt_ui_view(&promptUi);
+    if (!pv.visible) {
+        poll_nav(now);
+    }
+
+    if (pv.visible) {
+        bool promptViewChanged =
+            pv.visible != lastPromptVisible
+            || pv.highlight != lastPromptHighlight
+            || (pv.flash_text != nullptr) != lastPromptFlashing
+            || strcmp(lastPromptId, promptUi.current_id) != 0;
+        if (promptViewChanged) {
+            render_prompt(pv);
+            lastPromptVisible   = true;
+            lastPromptHighlight = pv.highlight;
+            lastPromptFlashing  = (pv.flash_text != nullptr);
+            strncpy(lastPromptId, promptUi.current_id, sizeof(lastPromptId) - 1);
+            lastPromptId[sizeof(lastPromptId) - 1] = 0;
+            lastDrawnState = (BuddyState)0xFF;
+            lastDrawnMsg[0] = 0;
+        }
+    } else if (currentCard == CARD_STATUS) {
+        lastPromptVisible = false;
         bool stateChanged = (next != lastDrawnState);
         bool msgChanged =
             strncmp(lastDrawnMsg, status.msg, sizeof(lastDrawnMsg)) != 0;
