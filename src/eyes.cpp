@@ -6,11 +6,17 @@
 namespace {
 
 const uint16_t kDimGrey   = 0x18C3;
+const uint16_t kSweatBlue = 0x65FF;  // R≈99 G≈190 B≈255
 const int      kEyeW      = 30;
 const int      kLeftX     = 30;
 const int      kRightX    = 180;
 const int      kBaseIdleY = 52;
 const int      kBaseWaitY = 32;
+const int      kActionH   = 14;   // squint half-height for "> <"
+const int      kSweatCX   = 195;  // x-centre of sweat drop (above right eye)
+const int      kSweatTipY = 25;   // resting y of teardrop tip
+const uint32_t kDripMs    = 2000; // drip cycle length in ms
+const int      kDripSteps = 8;    // how many px it drops per cycle
 
 const uint8_t kBlinkH[] = {30, 20, 10, 0, 10, 20, 30};
 const int     kBlinkN   = 7;
@@ -104,6 +110,7 @@ void eyes_reset(EyesAnim& e) {
     e.draw_h               = 30;
     e.draw_dx              = 0;
     e.draw_base_y          = kBaseIdleY;
+    e.draw_sweat_y         = 0;
 }
 
 void eyes_tick(EyesAnim& e, BuddyState state, uint32_t now) {
@@ -133,9 +140,13 @@ void eyes_tick(EyesAnim& e, BuddyState state, uint32_t now) {
 
     case STATE_WORKING: {
         float ph = (now - e.scan_epoch_ms) * (2.0f * 3.14159265f) / 1000.0f;
-        e.draw_dx     = (int16_t)(sinf(ph) * 30.0f);
-        e.draw_base_y = kBaseIdleY;
-        e.draw_h      = 30;
+        e.draw_dx      = (int16_t)(sinf(ph) * 30.0f);
+        e.draw_base_y  = kBaseIdleY;
+        e.draw_h       = 30;
+        // Integer-only drip: 0→kDripSteps px over kDripMs, then snaps back.
+        // uint32_t % uint32_t is exact regardless of uptime.
+        e.draw_sweat_y = (int8_t)((now - e.scan_epoch_ms) % kDripMs
+                                   * kDripSteps / kDripMs);
         break;
     }
 
@@ -152,6 +163,27 @@ void eyes_render(Adafruit_ST7789& tft, const EyesAnim& e, BuddyState state) {
     tft.fillScreen(ST77XX_BLACK);
 
     if (state == STATE_DISCONNECTED && e.disc_phase == 0) {
+        return;
+    }
+
+    if (state == STATE_WORKING) {
+        // "> <" squint — left eye ">" (tip left), right eye "<" (tip right)
+        int cy   = e.draw_base_y + 15;
+        int half = kActionH / 2;
+        int lx   = kLeftX  + e.draw_dx;
+        int rx   = kRightX + e.draw_dx;
+        tft.fillTriangle(lx,         cy,
+                         lx + kEyeW, cy - half,
+                         lx + kEyeW, cy + half, ST77XX_WHITE);
+        tft.fillTriangle(rx,         cy - half,
+                         rx,         cy + half,
+                         rx + kEyeW, cy,        ST77XX_WHITE);
+        // Sweat drop: triangle tip + circle body, drips kDripSteps px then resets
+        int ty = kSweatTipY + e.draw_sweat_y;
+        tft.fillTriangle(kSweatCX - 4, ty + 8,
+                         kSweatCX + 4, ty + 8,
+                         kSweatCX,     ty,      kSweatBlue);
+        tft.fillCircle(kSweatCX, ty + 13, 5, kSweatBlue);
         return;
     }
 

@@ -28,6 +28,7 @@ struct EyesAnim {
     uint8_t  draw_h;
     int16_t  draw_dx;
     int16_t  draw_base_y;
+    int8_t   draw_sweat_y;
 };
 
 void eyes_reset(EyesAnim& e);
