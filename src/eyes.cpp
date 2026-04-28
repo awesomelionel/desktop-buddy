@@ -145,10 +145,21 @@ void eyes_tick(EyesAnim& e, BuddyState state, uint32_t now) {
     }
 }
 
-void eyes_render(Adafruit_ST7789& tft, const EyesAnim& e, BuddyState state) {
-    tft.fillScreen(ST77XX_BLACK);
-
+void eyes_render(Adafruit_ST7789& tft, const EyesAnim& e, BuddyState state,
+                 bool full_clear) {
     if (state == STATE_DISCONNECTED) {
+        if (full_clear) {
+            tft.fillScreen(ST77XX_BLACK);
+        } else {
+            // Erase only the Z glyph bounding zone: x=[kZSpawnX, 239],
+            // y=[kZSpawnY+kZDriftY-2, kZSpawnY+3*8+2]. ~2 100 px vs 32 400
+            // for fillScreen — eliminates the ~13 ms full-screen black flash
+            // that causes flicker at 62 fps.
+            tft.fillRect(kZSpawnX, kZSpawnY + kZDriftY - 2,
+                         240 - kZSpawnX, -kZDriftY + 3 * 8 + 4,
+                         ST77XX_BLACK);
+        }
+
         const int cy  = kBaseIdleY + 15;       // 67
         const int top = cy - kLidH / 2;        // 62
         tft.fillRect(kLeftX,  top, kEyeW, kLidH, ST77XX_WHITE);
@@ -179,6 +190,8 @@ void eyes_render(Adafruit_ST7789& tft, const EyesAnim& e, BuddyState state) {
         }
         return;
     }
+
+    tft.fillScreen(ST77XX_BLACK);
 
     if (state == STATE_WORKING) {
         // "> <" squint — left eye ">" (tip left), right eye "<" (tip right)

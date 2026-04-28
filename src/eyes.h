@@ -33,4 +33,9 @@ struct EyesAnim {
 
 void eyes_reset(EyesAnim& e);
 void eyes_tick(EyesAnim& e, BuddyState state, uint32_t now_ms);
-void eyes_render(Adafruit_ST7789& tft, const EyesAnim& e, BuddyState state);
+// full_clear=true: fillScreen before drawing (needed on state transitions to erase
+// the previous state's pixels). full_clear=false: erase only the Z glyph zone —
+// used by the main loop for incremental DISCONNECTED animation frames to prevent
+// the 13ms full-screen black flash that would otherwise flicker at ~62 fps.
+void eyes_render(Adafruit_ST7789& tft, const EyesAnim& e, BuddyState state,
+                 bool full_clear = true);

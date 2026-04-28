@@ -412,14 +412,17 @@ void loop() {
         }
     } else if (currentCard == CARD_EYES) {
         eyes_tick(eyesAnim, currentState, now);
-        bool eyesChanged = !eyesFrameValid ||
-                           lastEyesState != currentState ||
+        bool stateJustChanged = !eyesFrameValid || (lastEyesState != currentState);
+        bool eyesChanged = stateJustChanged ||
                            lastEyesH != eyesAnim.draw_h ||
                            lastEyesDx != eyesAnim.draw_dx ||
                            lastEyesBaseY != eyesAnim.draw_base_y ||
                            lastEyesDiscAge != eyesAnim.disc_age_ms;
         if (eyesChanged) {
-            paint_current_card();
+            // Incremental DISCONNECTED frames use a partial erase to avoid the
+            // ~13 ms full-screen black flash that causes visible flicker at 62 fps.
+            bool full_clear = stateJustChanged || (currentState != STATE_DISCONNECTED);
+            eyes_render(tft, eyesAnim, currentState, full_clear);
             lastEyesState = currentState;
             lastEyesH = eyesAnim.draw_h;
             lastEyesDx = eyesAnim.draw_dx;
