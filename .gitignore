@@ -2,5 +2,6 @@
 .DS_Store
 .pio/
 .claude/
+.superpowers/
 /deskhog_src/
 .vscode/
