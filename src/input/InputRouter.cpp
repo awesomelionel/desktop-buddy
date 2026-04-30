@@ -46,10 +46,12 @@ ButtonEvent InputRouter::update(uint32_t now_ms) {
 
     // Map physical layout (D0 = next = "down", D2 = prev = "up", D1 = center)
     // onto the buttons.h enum.
-    return buttons_step(&buttons_, now_ms,
-                        /*up_raw=*/    prev_raw,
-                        /*down_raw=*/  next_raw,
-                        /*center_raw=*/center_raw);
+    ButtonEvent ev = buttons_step(&buttons_, now_ms,
+                                  /*up_raw=*/    prev_raw,
+                                  /*down_raw=*/  next_raw,
+                                  /*center_raw=*/center_raw);
+    if (ev != BTN_NONE) last_input_ms_ = now_ms;
+    return ev;
 }
 
 void InputRouter::dispatch(ButtonEvent ev, uint32_t now_ms) {
