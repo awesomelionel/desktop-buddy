@@ -19,6 +19,7 @@ enum class EventKind : uint8_t {
     PromptHide,         // PromptUi went hidden
     WifiConnected,      // WifiManager reached STA_CONNECTED
     WifiDisconnected,   // WifiManager left STA_CONNECTED
+    SettingsChanged,    // any field on core/Settings persisted
     Count_,
 };
 
