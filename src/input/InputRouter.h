@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <functional>
 
 #include "buttons.h"
 #include "../ui/CardStack.h"
@@ -31,6 +32,14 @@ public:
     // Convenience: update + dispatch in one call.
     void tick(uint32_t now_ms) { dispatch(update(now_ms), now_ms); }
 
+    // Optional: register a callback fired when the center button has been
+    // held continuously for `hold_ms`. Fires once per held press.
+    using LongPressFn = std::function<void()>;
+    void onCenterLongPress(uint32_t hold_ms, LongPressFn fn) {
+        center_hold_ms_ = hold_ms;
+        center_long_press_ = std::move(fn);
+    }
+
 private:
     int       pin_next_;
     uint8_t   next_pressed_level_;
@@ -41,4 +50,11 @@ private:
     CardStack& stack_;
 
     Buttons buttons_;
+
+    // Center long-press tracking.
+    uint32_t    center_hold_ms_      = 0;
+    LongPressFn center_long_press_;
+    bool        center_held_         = false;
+    uint32_t    center_press_ms_     = 0;
+    bool        center_long_fired_   = false;
 };

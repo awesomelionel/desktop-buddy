@@ -61,6 +61,16 @@ void setup() {
 
     cardController.begin();
 
+    // Hold center 5s to wipe Wi-Fi creds and reboot into the captive
+    // portal. Useful when the network changes or the user wants to
+    // reprovision without flashing.
+    inputRouter.onCenterLongPress(5000, [] {
+        Serial.println("[wifi] center long-press: clearing creds and rebooting");
+        configStore.clear();
+        delay(200);
+        ESP.restart();
+    });
+
     drawSplash();
 
     bleLink.setEventBus(&eventBus);
