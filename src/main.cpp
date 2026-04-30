@@ -27,7 +27,7 @@ static EventBus     eventBus;
 static Settings     settings;
 static ConfigStore  configStore;
 static WifiManager  wifiManager{configStore};
-static HttpServer   httpServer{wifiManager, appState, configStore};
+static HttpServer   httpServer{wifiManager, appState, configStore, settings};
 static BleLink      bleLink{appState};
 
 static PromptUi     promptUi = {};
