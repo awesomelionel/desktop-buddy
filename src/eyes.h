@@ -7,9 +7,9 @@
 struct EyesAnim {
     BuddyState prev_state;
 
-    // DISCONNECTED pulse
-    uint8_t  disc_phase;    // 0 black, 1 dim eyes
-    uint32_t disc_next_ms;  // next phase transition
+    // DISCONNECTED asleep
+    uint32_t disc_anim_start_ms;  // millis() at entry to STATE_DISCONNECTED
+    uint32_t disc_age_ms;         // cached for render: (now - disc_anim_start_ms)
 
     // Squish-blink (IDLE, WAITING): index into height table, -1 = idle between blinks
     int8_t   blink_i;
@@ -33,4 +33,9 @@ struct EyesAnim {
 
 void eyes_reset(EyesAnim& e);
 void eyes_tick(EyesAnim& e, BuddyState state, uint32_t now_ms);
-void eyes_render(Adafruit_ST7789& tft, const EyesAnim& e, BuddyState state);
+// full_clear=true: fillScreen before drawing (needed on state transitions to erase
+// the previous state's pixels). full_clear=false: erase only the Z glyph zone —
+// used by the main loop for incremental DISCONNECTED animation frames to prevent
+// the 13ms full-screen black flash that would otherwise flicker at ~62 fps.
+void eyes_render(Adafruit_ST7789& tft, const EyesAnim& e, BuddyState state,
+                 bool full_clear = true);
