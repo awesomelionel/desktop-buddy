@@ -13,6 +13,12 @@
 // TX char: 6e400003-b5a3-f393-e0a9-e50e24dcca9e (notify)
 
 void   ble_init(const char* device_name);
+
+// Update the advertising name without tearing down the GATT services.
+// The GAP device name is updated and advertising is restarted, which
+// disconnects any connected central briefly. No-op if name is null/empty.
+void   ble_set_device_name(const char* device_name);
+
 bool   ble_connected();
 size_t ble_available();
 int    ble_read();   // -1 if empty

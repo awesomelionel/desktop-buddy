@@ -2,9 +2,12 @@
 
 #include <Arduino.h>
 
+#include <string.h>
+
 #include "../ble_bridge.h"
 #include "../core/AppState.h"
 #include "../core/EventBus.h"
+#include "../core/Settings.h"
 #include "protocol.h"
 
 BleLink::BleLink(AppState& app)
@@ -12,6 +15,22 @@ BleLink::BleLink(AppState& app)
 
 void BleLink::begin(const char* device_name) {
     ble_init(device_name);
+    if (device_name) {
+        strncpy(current_name_, device_name, sizeof(current_name_) - 1);
+        current_name_[sizeof(current_name_) - 1] = 0;
+    }
+}
+
+void BleLink::registerEvents() {
+    if (!bus_) return;
+    bus_->subscribe(EventKind::SettingsChanged, [this] {
+        if (!settings_) return;
+        const char* desired = settings_->data().device_name;
+        if (strncmp(current_name_, desired, sizeof(current_name_)) == 0) return;
+        ble_set_device_name(desired);
+        strncpy(current_name_, desired, sizeof(current_name_) - 1);
+        current_name_[sizeof(current_name_) - 1] = 0;
+    });
 }
 
 void BleLink::tick(uint32_t now_ms) {

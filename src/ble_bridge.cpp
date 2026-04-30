@@ -3,6 +3,7 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
+#include <esp_gap_ble_api.h>
 
 // Nordic UART Service UUIDs — every BLE serial example uses these.
 #define NUS_SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
@@ -76,6 +77,17 @@ void ble_init(const char* device_name) {
     adv->setMaxPreferred(0x12);
     BLEDevice::startAdvertising();
     Serial.printf("[ble] advertising as '%s'\n", device_name);
+}
+
+void ble_set_device_name(const char* device_name) {
+    if (!device_name || !device_name[0]) return;
+    // Updates the GAP device name; the BLEAdvertising scan response will
+    // pick up the new value when we restart advertising. Connected
+    // central sees a transient disconnect — acceptable per the spec.
+    esp_ble_gap_set_device_name(device_name);
+    BLEDevice::stopAdvertising();
+    BLEDevice::startAdvertising();
+    Serial.printf("[ble] renamed to '%s'\n", device_name);
 }
 
 bool   ble_connected() { return connected; }

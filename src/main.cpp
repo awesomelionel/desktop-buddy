@@ -80,6 +80,8 @@ void setup() {
     drawSplash();
 
     bleLink.setEventBus(&eventBus);
+    bleLink.setSettings(&settings);
+    bleLink.registerEvents();
     wifiManager.setEventBus(&eventBus);
     bleLink.begin(appState.deviceName());
 
