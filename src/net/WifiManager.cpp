@@ -24,7 +24,8 @@ WifiManager::WifiManager(ConfigStore& store)
       ssid_{0},
       password_{0},
       reconnect_at_ms_(0),
-      reconnect_delay_ms_(INITIAL_RECONNECT_MS) {}
+      reconnect_delay_ms_(INITIAL_RECONNECT_MS),
+      reconnect_attempts_(0) {}
 
 void WifiManager::begin() {
     WiFi.onEvent([this](WiFiEvent_t ev, WiFiEventInfo_t /*info*/) {
@@ -151,9 +152,24 @@ void WifiManager::enterStaConnecting(uint32_t now_ms) {
 
 void WifiManager::enterStaReconnect(uint32_t now_ms) {
     bool was_connected = (state_ == WifiState::STA_CONNECTED);
+    reconnect_attempts_++;
+    if (reconnect_attempts_ >= MAX_RECONNECT_ATTEMPTS) {
+        Serial.printf("[wifi] %u failed reconnects → AP_PROVISIONING\n",
+                      (unsigned)reconnect_attempts_);
+        reconnect_attempts_ = 0;
+        reconnect_delay_ms_ = INITIAL_RECONNECT_MS;
+        WiFi.disconnect(false, false);
+        if (was_connected && bus_) bus_->publish(EventKind::WifiDisconnected);
+        enterApProvisioning();
+        return;
+    }
+
     state_ = WifiState::STA_RECONNECT;
     reconnect_at_ms_ = now_ms + reconnect_delay_ms_;
-    Serial.printf("[wifi] STA_RECONNECT in %u ms\n", (unsigned)reconnect_delay_ms_);
+    Serial.printf("[wifi] STA_RECONNECT in %u ms (attempt %u/%u)\n",
+                  (unsigned)reconnect_delay_ms_,
+                  (unsigned)reconnect_attempts_,
+                  (unsigned)MAX_RECONNECT_ATTEMPTS);
     reconnect_delay_ms_ = reconnect_delay_ms_ < MAX_RECONNECT_MS
                           ? reconnect_delay_ms_ * 2
                           : MAX_RECONNECT_MS;
@@ -165,6 +181,7 @@ void WifiManager::enterStaConnected() {
     bool was_connected = (state_ == WifiState::STA_CONNECTED);
     state_ = WifiState::STA_CONNECTED;
     reconnect_delay_ms_ = INITIAL_RECONNECT_MS;
+    reconnect_attempts_ = 0;
     Serial.printf("[wifi] STA_CONNECTED ip=%s\n", WiFi.localIP().toString().c_str());
     if (!was_connected && bus_) bus_->publish(EventKind::WifiConnected);
 }
