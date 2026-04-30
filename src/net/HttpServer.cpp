@@ -1,9 +1,7 @@
 #include "HttpServer.h"
 
 #include <Arduino.h>
-#include <ArduinoJson.h>
 #include <DNSServer.h>
-#include <ESPmDNS.h>
 #include <WebServer.h>
 #include <WiFi.h>
 
@@ -12,9 +10,36 @@
 #include "WifiManager.h"
 
 namespace {
-constexpr uint16_t HTTP_PORT      = 80;
-constexpr uint8_t  DNS_PORT       = 53;
-constexpr const char* MDNS_HOST   = "claude-buddy";
+constexpr uint16_t HTTP_PORT = 80;
+constexpr uint8_t  DNS_PORT  = 53;
+
+// Minimal JSON string escaper for the /status endpoint. Handles the
+// characters that JSON requires: \", \\, \n, \r, \t, and control chars
+// below 0x20. Output is appended to `out`.
+void appendJsonString(String& out, const char* s) {
+    out += '"';
+    if (s) {
+        for (const char* p = s; *p; ++p) {
+            unsigned char c = static_cast<unsigned char>(*p);
+            switch (c) {
+                case '"':  out += "\\\""; break;
+                case '\\': out += "\\\\"; break;
+                case '\n': out += "\\n";  break;
+                case '\r': out += "\\r";  break;
+                case '\t': out += "\\t";  break;
+                default:
+                    if (c < 0x20) {
+                        char esc[8];
+                        snprintf(esc, sizeof(esc), "\\u%04x", c);
+                        out += esc;
+                    } else {
+                        out += static_cast<char>(c);
+                    }
+            }
+        }
+    }
+    out += '"';
+}
 }  // namespace
 
 HttpServer::HttpServer(const WifiManager& wifi, const AppState& app, ConfigStore& config)
@@ -53,14 +78,8 @@ void HttpServer::startSta() {
     registerStaHandlers();
     server_->begin();
 
-    if (MDNS.begin(MDNS_HOST)) {
-        MDNS.addService("http", "tcp", HTTP_PORT);
-        Serial.printf("[http] STA listening on http://%s.local (%s)\n",
-                      MDNS_HOST, WiFi.localIP().toString().c_str());
-    } else {
-        Serial.printf("[http] STA listening on %s (mDNS unavailable)\n",
-                      WiFi.localIP().toString().c_str());
-    }
+    Serial.printf("[http] STA listening on http://%s\n",
+                  WiFi.localIP().toString().c_str());
 
     role_ = Role::STA;
 }
@@ -93,27 +112,33 @@ void HttpServer::stop() {
         delete dns_;
         dns_ = nullptr;
     }
-    if (role_ == Role::STA) MDNS.end();
     role_ = Role::NONE;
 }
 
 void HttpServer::registerStaHandlers() {
     server_->on("/status", HTTP_GET, [this]() {
-        JsonDocument doc;
-        doc["state"]    = wifi_.stateName();
-        doc["ssid"]     = wifi_.ssid();
-        doc["ip"]       = wifi_.ip().toString();
-        doc["uptime_ms"] = millis() - boot_ms_;
-        doc["device"]   = app_.deviceName();
-        doc["live"]     = app_.isLive(millis());
-        doc["claude_state"] = state_name(app_.buddyState());
-        doc["status"]["total"]   = app_.status().total;
-        doc["status"]["running"] = app_.status().running;
-        doc["status"]["waiting"] = app_.status().waiting;
-        doc["status"]["msg"]     = app_.status().msg;
-
+        // Hand-built JSON: ArduinoJson would pull in another ~10KB+ for
+        // a single fixed-shape document. Only `msg` carries arbitrary
+        // user payload, so it's the only field that goes through the
+        // escaper.
+        const ClaudeStatus& s    = app_.status();
+        const uint32_t      now  = millis();
         String out;
-        serializeJson(doc, out);
+        out.reserve(256);
+
+        out += "{\"state\":";        appendJsonString(out, wifi_.stateName());
+        out += ",\"ssid\":";          appendJsonString(out, wifi_.ssid());
+        out += ",\"ip\":\"";          out += wifi_.ip().toString(); out += '"';
+        out += ",\"uptime_ms\":";     out += String(now - boot_ms_);
+        out += ",\"device\":";        appendJsonString(out, app_.deviceName());
+        out += ",\"live\":";          out += app_.isLive(now) ? "true" : "false";
+        out += ",\"claude_state\":";  appendJsonString(out, state_name(app_.buddyState()));
+        out += ",\"status\":{\"total\":"; out += s.total;
+        out += ",\"running\":";       out += s.running;
+        out += ",\"waiting\":";       out += s.waiting;
+        out += ",\"msg\":";           appendJsonString(out, s.msg);
+        out += "}}";
+
         server_->send(200, "application/json", out);
     });
 

@@ -112,7 +112,8 @@ void WifiCard::render(Display& display) {
 
             tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
             tft.setCursor(8, 100);
-            tft.print("http://claude-buddy.local");
+            tft.print("http://");
+            tft.print(wifi_.ip().toString());
             break;
         }
     }
