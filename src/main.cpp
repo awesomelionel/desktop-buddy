@@ -5,8 +5,10 @@
 #include "ble_bridge.h"
 #include "buttons.h"
 #include "core/AppState.h"
+#include "core/ConfigStore.h"
 #include "display/Display.h"
 #include "input/InputRouter.h"
+#include "net/WifiManager.h"
 #include "prompt_ui.h"
 #include "protocol.h"
 #include "state.h"
@@ -27,6 +29,9 @@ static const uint32_t FRAME_PACING_MS          = 16;
 static const uint8_t  BTN_NEXT_PRESSED_LEVEL   = LOW;   // GPIO0 / BOOT
 static const uint8_t  BTN_PREV_PRESSED_LEVEL   = HIGH;  // GPIO2 / D2
 static const uint8_t  BTN_CENTER_PRESSED_LEVEL = HIGH;  // GPIO1 / D1
+
+static ConfigStore  configStore;
+static WifiManager  wifiManager{configStore};
 
 static StatusCard  statusCard{appState};
 static EyesCard    eyesCard{appState};
@@ -112,6 +117,7 @@ void setup() {
     display.begin();
     inputRouter.begin();
     prompt_ui_init(&promptUi);
+    configStore.begin();
 
     cardStack.addCard(&statusCard);
     cardStack.addCard(&eyesCard);
@@ -128,6 +134,16 @@ void setup() {
     tft.print(appState.deviceName());
 
     ble_init(appState.deviceName());
+
+    // Start Wi-Fi AFTER BLE; both share the radio and Arduino's stack
+    // initializes them in order. Hardcode dev creds here until the
+    // captive portal lands in step 5 of the Wi-Fi plan.
+#ifdef WIFI_DEV_SSID
+    if (!configStore.hasCreds()) {
+        configStore.setCreds(WIFI_DEV_SSID, WIFI_DEV_PASS);
+    }
+#endif
+    wifiManager.begin();
 
     appState.setBuddyState(state_derive(appState.status(), appState.isLive(millis())));
     statusCard.invalidate();
@@ -169,6 +185,7 @@ void loop() {
     }
 
     uint32_t now = millis();
+    wifiManager.tick(now);
     appState.setBuddyState(state_derive(appState.status(), appState.isLive(now)));
 
     prompt_ui_update(&promptUi, appState.status().prompt, appState.isLive(now), now);
