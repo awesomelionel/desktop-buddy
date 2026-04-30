@@ -2,12 +2,12 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 
-#include "ble_bridge.h"
 #include "buttons.h"
 #include "core/AppState.h"
 #include "core/ConfigStore.h"
 #include "display/Display.h"
 #include "input/InputRouter.h"
+#include "net/BleLink.h"
 #include "net/HttpServer.h"
 #include "net/WifiManager.h"
 #include "prompt_ui.h"
@@ -35,6 +35,7 @@ static const uint8_t  BTN_CENTER_PRESSED_LEVEL = HIGH;  // GPIO1 / D1
 static ConfigStore  configStore;
 static WifiManager  wifiManager{configStore};
 static HttpServer   httpServer{wifiManager, appState, configStore};
+static BleLink      bleLink{appState};
 
 static StatusCard  statusCard{appState};
 static EyesCard    eyesCard{appState};
@@ -75,7 +76,7 @@ void setup() {
     tft.setCursor(48, 72);
     tft.print(appState.deviceName());
 
-    ble_init(appState.deviceName());
+    bleLink.begin(appState.deviceName());
 
 #ifdef WIFI_DEV_SSID
     if (!configStore.hasCreds()) {
@@ -92,39 +93,8 @@ void setup() {
 void loop() {
     uint32_t loop_start = millis();
 
-    // Snapshot lines can carry an `entries[]` transcript array; REFERENCE.md
-    // caps event payloads at 4KB. 4096 + 1 for the null terminator gives us
-    // exactly the max wire size with no headroom games.
-    static char   lineBuf[4097];
-    static size_t lineLen      = 0;
-    static bool   lineOverflow = false;
-
-    while (ble_available()) {
-        int c = ble_read();
-        if (c < 0) break;
-        if (c == '\n' || c == '\r') {
-            if (lineOverflow) {
-                Serial.printf("[rx] line overflow (>%u bytes), dropped\n",
-                              (unsigned)sizeof(lineBuf) - 1);
-                lineOverflow = false;
-            } else if (lineLen > 0) {
-                lineBuf[lineLen] = 0;
-                if (lineBuf[0] == '{') {
-                    if (protocol_parse_line(lineBuf, &appState.mutableStatus())) {
-                        appState.markSnapshot(millis());
-                        Serial.printf("[rx] %s\n", lineBuf);
-                    }
-                }
-            }
-            lineLen = 0;
-        } else if (lineLen < sizeof(lineBuf) - 1) {
-            lineBuf[lineLen++] = (char)c;
-        } else {
-            lineOverflow = true;
-        }
-    }
-
     uint32_t now = millis();
+    bleLink.tick(now);
     wifiManager.tick(now);
     httpServer.tick(now);
     appState.setBuddyState(state_derive(appState.status(), appState.isLive(now)));
@@ -151,11 +121,7 @@ void loop() {
     // Drain any decision the PromptCard pushed onto PromptUi.
     char outBuf[96];
     if (prompt_ui_take_outgoing(&promptUi, outBuf, sizeof(outBuf))) {
-        if (!ble_write_line(outBuf)) {
-            Serial.printf("[tx] dropped (not connected): %s\n", outBuf);
-        } else {
-            Serial.printf("[tx] %s\n", outBuf);
-        }
+        bleLink.writeLine(outBuf);
     }
 
     cardStack.tick(now, display);
