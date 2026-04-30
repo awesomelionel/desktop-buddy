@@ -1,19 +1,21 @@
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
-#include <esp_mac.h>
 
 #include "ble_bridge.h"
 #include "buttons.h"
+#include "core/AppState.h"
+#include "display/Display.h"
 #include "eyes.h"
 #include "prompt_ui.h"
 #include "protocol.h"
 #include "state.h"
 
-// 1.14" Reverse TFT Feather: 240x135 native landscape, rotation 1 = 90° clockwise.
-static Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
-static const int W = 240;
-static const int H = 135;
+static Display          display;
+static AppState         appState;
+static Adafruit_ST7789& tft = display.tft();
+static constexpr int    W   = Display::W;
+static constexpr int    H   = Display::H;
 
 enum CardId : uint8_t { CARD_STATUS = 0, CARD_EYES, CARD_NAV_TEST, CARD_COUNT };
 
@@ -27,12 +29,8 @@ static const uint8_t       BTN_PREV_PRESSED_LEVEL = HIGH;  // GPIO2 / D2
 static CardId   currentCard = CARD_STATUS;
 static EyesAnim eyesAnim    = {};
 
-static char         deviceName[16] = "Claude";
-static ClaudeStatus status         = {};
-static BuddyState   currentState   = STATE_DISCONNECTED;
 static BuddyState   lastDrawnState = (BuddyState)0xFF;
-static char         lastDrawnMsg[sizeof(status.msg)] = {};
-static uint32_t     lastSnapshotMs = 0;
+static char         lastDrawnMsg[sizeof(ClaudeStatus::msg)] = {};
 static bool         eyesFrameValid = false;
 static BuddyState   lastEyesState = (BuddyState)0xFF;
 static uint8_t      lastEyesH = 0;
@@ -46,40 +44,17 @@ static PromptOption lastPromptHighlight  = OPT_APPROVE;
 static char         lastPromptId[40]     = {};
 static bool         lastPromptFlashing   = false;
 
-// Treat the link as live if a snapshot arrived within the heartbeat window.
-// REFERENCE.md says the desktop sends a keepalive every 10s and to treat
-// >30s of silence as dead.
-static const uint32_t LIVE_TIMEOUT_MS = 30000;
-
-static bool isLive() {
-    return lastSnapshotMs != 0 && (millis() - lastSnapshotMs) <= LIVE_TIMEOUT_MS;
-}
-
-static void initDeviceName() {
-    uint8_t mac[6] = {0};
-    esp_read_mac(mac, ESP_MAC_BT);
-    snprintf(deviceName, sizeof(deviceName), "Claude-%02X%02X", mac[4], mac[5]);
-}
-
-static void initDisplay() {
-    pinMode(TFT_BACKLITE, OUTPUT);
-    digitalWrite(TFT_BACKLITE, HIGH);
-    pinMode(TFT_I2C_POWER, OUTPUT);
-    digitalWrite(TFT_I2C_POWER, HIGH);
-    delay(10);
-    tft.init(135, 240);
-    tft.setRotation(1);
-    tft.fillScreen(ST77XX_BLACK);
-    tft.setTextWrap(false);
-}
-
 static void render_status() {
+    const ClaudeStatus& status = appState.status();
+    const BuddyState    bs     = appState.buddyState();
+    const bool          live   = appState.isLive(millis());
+
     tft.fillScreen(ST77XX_BLACK);
 
     // State name, big and centered horizontally near the top half.
     tft.setTextSize(3);
     tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-    const char* name = state_name(currentState);
+    const char* name = state_name(bs);
     int16_t  x1, y1; uint16_t tw, th;
     tft.getTextBounds(name, 0, 0, &x1, &y1, &tw, &th);
     tft.setCursor((W - (int)tw) / 2, 20);
@@ -104,11 +79,11 @@ static void render_status() {
     }
 
     // Footer: device name + link state.
-    tft.setTextColor(isLive() ? ST77XX_GREEN : ST77XX_RED, ST77XX_BLACK);
+    tft.setTextColor(live ? ST77XX_GREEN : ST77XX_RED, ST77XX_BLACK);
     tft.setCursor(8, 118);
-    tft.print(isLive() ? "LIVE  " : "OFFLN ");
+    tft.print(live ? "LIVE  " : "OFFLN ");
     tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-    tft.print(deviceName);
+    tft.print(appState.deviceName());
 }
 
 static void render_prompt(const PromptView& v) {
@@ -163,11 +138,12 @@ static void render_prompt(const PromptView& v) {
     }
 
     tft.setTextSize(1);
-    tft.setTextColor(isLive() ? ST77XX_GREEN : ST77XX_RED, ST77XX_BLACK);
+    const bool live = appState.isLive(millis());
+    tft.setTextColor(live ? ST77XX_GREEN : ST77XX_RED, ST77XX_BLACK);
     tft.setCursor(8, 118);
-    tft.print(isLive() ? "LIVE  " : "OFFLN ");
+    tft.print(live ? "LIVE  " : "OFFLN ");
     tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-    tft.print(deviceName);
+    tft.print(appState.deviceName());
 }
 
 static void render_nav_test() {
@@ -194,15 +170,15 @@ static void paint_current_card() {
     if (currentCard == CARD_STATUS) {
         render_status();
     } else if (currentCard == CARD_EYES) {
-        eyes_render(tft, eyesAnim, currentState);
+        eyes_render(tft, eyesAnim, appState.buddyState());
     } else {
         render_nav_test();
     }
 }
 
 static void sync_status_meta() {
-    lastDrawnState = currentState;
-    strncpy(lastDrawnMsg, status.msg, sizeof(lastDrawnMsg) - 1);
+    lastDrawnState = appState.buddyState();
+    strncpy(lastDrawnMsg, appState.status().msg, sizeof(lastDrawnMsg) - 1);
     lastDrawnMsg[sizeof(lastDrawnMsg) - 1] = 0;
 }
 
@@ -282,8 +258,8 @@ void setup() {
     Serial.begin(115200);
     delay(200);
 
-    initDeviceName();
-    initDisplay();
+    appState.initDeviceName();
+    display.begin();
 
     pinMode(PIN_BTN_NEXT, INPUT_PULLUP);
     // D2 on this hardware is active HIGH in the deskhog setup.
@@ -300,13 +276,13 @@ void setup() {
     tft.print("claude buddy");
     tft.setTextSize(1);
     tft.setCursor(48, 72);
-    tft.print(deviceName);
+    tft.print(appState.deviceName());
 
-    ble_init(deviceName);
+    ble_init(appState.deviceName());
 
-    currentState = state_derive(status, isLive());
+    appState.setBuddyState(state_derive(appState.status(), appState.isLive(millis())));
     paint_current_card();
-    lastDrawnState = currentState;
+    lastDrawnState = appState.buddyState();
     lastDrawnMsg[0] = 0;
 }
 
@@ -331,8 +307,8 @@ void loop() {
             } else if (lineLen > 0) {
                 lineBuf[lineLen] = 0;
                 if (lineBuf[0] == '{') {
-                    if (protocol_parse_line(lineBuf, &status)) {
-                        lastSnapshotMs = millis();
+                    if (protocol_parse_line(lineBuf, &appState.mutableStatus())) {
+                        appState.markSnapshot(millis());
                         Serial.printf("[rx] %s\n", lineBuf);
                     }
                 }
@@ -348,10 +324,10 @@ void loop() {
     }
 
     uint32_t     now  = millis();
-    BuddyState   next = state_derive(status, isLive());
-    currentState      = next;
+    BuddyState   next = state_derive(appState.status(), appState.isLive(now));
+    appState.setBuddyState(next);
 
-    prompt_ui_update(&promptUi, status.prompt, isLive(), now);
+    prompt_ui_update(&promptUi, appState.status().prompt, appState.isLive(now), now);
     bool up_raw     = (digitalRead(2) == HIGH);
     bool down_raw   = (digitalRead(0) == LOW);
     bool center_raw = (digitalRead(1) == HIGH);
@@ -394,7 +370,7 @@ void loop() {
         lastPromptVisible = false;
         bool stateChanged = (next != lastDrawnState);
         bool msgChanged =
-            strncmp(lastDrawnMsg, status.msg, sizeof(lastDrawnMsg)) != 0;
+            strncmp(lastDrawnMsg, appState.status().msg, sizeof(lastDrawnMsg)) != 0;
         if (stateChanged || msgChanged) {
             paint_current_card();
             sync_status_meta();
@@ -402,8 +378,8 @@ void loop() {
             static uint32_t lastTick = 0;
             if (now - lastTick > 1000) {
                 lastTick = now;
-                BuddyState recheck = state_derive(status, isLive());
-                currentState       = recheck;
+                BuddyState recheck = state_derive(appState.status(), appState.isLive(now));
+                appState.setBuddyState(recheck);
                 if (recheck != lastDrawnState) {
                     paint_current_card();
                     sync_status_meta();
@@ -411,8 +387,9 @@ void loop() {
             }
         }
     } else if (currentCard == CARD_EYES) {
-        eyes_tick(eyesAnim, currentState, now);
-        bool stateJustChanged = !eyesFrameValid || (lastEyesState != currentState);
+        BuddyState bs = appState.buddyState();
+        eyes_tick(eyesAnim, bs, now);
+        bool stateJustChanged = !eyesFrameValid || (lastEyesState != bs);
         bool eyesChanged = stateJustChanged ||
                            lastEyesH != eyesAnim.draw_h ||
                            lastEyesDx != eyesAnim.draw_dx ||
@@ -421,9 +398,9 @@ void loop() {
         if (eyesChanged) {
             // Incremental DISCONNECTED frames use a partial erase to avoid the
             // ~13 ms full-screen black flash that causes visible flicker at 62 fps.
-            bool full_clear = stateJustChanged || (currentState != STATE_DISCONNECTED);
-            eyes_render(tft, eyesAnim, currentState, full_clear);
-            lastEyesState = currentState;
+            bool full_clear = stateJustChanged || (bs != STATE_DISCONNECTED);
+            eyes_render(tft, eyesAnim, bs, full_clear);
+            lastEyesState = bs;
             lastEyesH = eyesAnim.draw_h;
             lastEyesDx = eyesAnim.draw_dx;
             lastEyesBaseY = eyesAnim.draw_base_y;
