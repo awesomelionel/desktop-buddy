@@ -6,6 +6,20 @@ void CardStack::addCard(Card* card) {
     cards_.push_back(card);
 }
 
+void CardStack::clear() {
+    cards_.clear();
+    index_   = 0;
+    overlay_ = nullptr;
+}
+
+void CardStack::setIndex(size_t i) {
+    if (overlay_ || cards_.empty()) return;
+    if (i >= cards_.size()) i = cards_.size() - 1;
+    index_ = i;
+    Card* a = active();
+    if (a) a->invalidate();
+}
+
 void CardStack::pushOverlay(Card* card) {
     if (overlay_ == card) return;
     overlay_ = card;

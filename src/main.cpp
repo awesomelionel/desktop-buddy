@@ -32,6 +32,7 @@ static BleLink      bleLink{appState};
 
 static PromptUi     promptUi = {};
 static CardController cardController{appState, eventBus, wifiManager, promptUi, bleLink,
+                                     settings,
                                      PIN_BTN_NEXT, BTN_NEXT_PRESSED_LEVEL,
                                      PIN_BTN_PREV, BTN_PREV_PRESSED_LEVEL};
 static InputRouter  inputRouter{PIN_BTN_NEXT,   BTN_NEXT_PRESSED_LEVEL,
@@ -65,6 +66,7 @@ void setup() {
     prompt_ui_init(&promptUi);
     configStore.begin();
 
+    cardController.setInputRouter(&inputRouter);
     cardController.begin();
 
     // Hold center 5s to wipe Wi-Fi creds and reboot into the captive
