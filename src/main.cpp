@@ -24,15 +24,15 @@ static const uint32_t FRAME_PACING_MS          = 16;
 static Display      display;
 static AppState     appState;
 static EventBus     eventBus;
-static Settings     settings;
+static Settings     settingsStore;  // class Settings (the wrapper); the lowercase 'settings' namespace lives in lib/settings, so we name the global differently to avoid a token clash.
 static ConfigStore  configStore;
 static WifiManager  wifiManager{configStore};
-static HttpServer   httpServer{wifiManager, appState, configStore, settings};
+static HttpServer   httpServer{wifiManager, appState, configStore, settingsStore};
 static BleLink      bleLink{appState};
 
 static PromptUi     promptUi = {};
 static CardController cardController{appState, eventBus, wifiManager, promptUi, bleLink,
-                                     settings,
+                                     settingsStore,
                                      PIN_BTN_NEXT, BTN_NEXT_PRESSED_LEVEL,
                                      PIN_BTN_PREV, BTN_PREV_PRESSED_LEVEL};
 static InputRouter  inputRouter{PIN_BTN_NEXT,   BTN_NEXT_PRESSED_LEVEL,
@@ -57,9 +57,9 @@ void setup() {
     delay(200);
 
     appState.initMacDeviceName();
-    settings.setEventBus(&eventBus);
-    settings.begin(appState.macDeviceName());
-    appState.setSettings(&settings);
+    settingsStore.setEventBus(&eventBus);
+    settingsStore.begin(appState.macDeviceName());
+    appState.setSettings(&settingsStore);
 
     display.begin();
     inputRouter.begin();
@@ -82,7 +82,7 @@ void setup() {
     drawSplash();
 
     bleLink.setEventBus(&eventBus);
-    bleLink.setSettings(&settings);
+    bleLink.setSettings(&settingsStore);
     bleLink.registerEvents();
     wifiManager.setEventBus(&eventBus);
     bleLink.begin(appState.deviceName());
