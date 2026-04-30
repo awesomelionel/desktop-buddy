@@ -1,8 +1,6 @@
 #include "ble_bridge.h"
 #include <Arduino.h>
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
+#include <NimBLEDevice.h>
 
 // Nordic UART Service UUIDs — every BLE serial example uses these.
 #define NUS_SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
@@ -16,10 +14,10 @@ static uint8_t  rxBuf[RX_CAP];
 static volatile size_t rxHead = 0;
 static volatile size_t rxTail = 0;
 
-static BLEServer*         server = nullptr;
-static BLECharacteristic* rxChar = nullptr;
-static BLECharacteristic* txChar = nullptr;
-static volatile bool      connected = false;
+static NimBLEServer*         server = nullptr;
+static NimBLECharacteristic* rxChar = nullptr;
+static NimBLECharacteristic* txChar = nullptr;
+static volatile bool         connected = false;
 
 static void rxPush(const uint8_t* p, size_t n) {
     for (size_t i = 0; i < n; i++) {
@@ -30,51 +28,50 @@ static void rxPush(const uint8_t* p, size_t n) {
     }
 }
 
-class RxCallbacks : public BLECharacteristicCallbacks {
-    void onWrite(BLECharacteristic* c) override {
-        String v = c->getValue();
+class RxCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* c) override {
+        std::string v = c->getValue();
         if (v.length() > 0)
-            rxPush(reinterpret_cast<const uint8_t*>(v.c_str()), v.length());
+            rxPush(reinterpret_cast<const uint8_t*>(v.data()), v.length());
     }
 };
 
-class ServerCallbacks : public BLEServerCallbacks {
-    void onConnect(BLEServer*) override {
+class ServerCallbacks : public NimBLEServerCallbacks {
+    void onConnect(NimBLEServer*) override {
         connected = true;
         Serial.println("[ble] connected");
     }
-    void onDisconnect(BLEServer*) override {
+    void onDisconnect(NimBLEServer*) override {
         connected = false;
         Serial.println("[ble] disconnected, restarting advertising");
-        BLEDevice::startAdvertising();
+        NimBLEDevice::startAdvertising();
     }
 };
 
 void ble_init(const char* device_name) {
-    BLEDevice::init(device_name);
-    BLEDevice::setMTU(517);
+    NimBLEDevice::init(device_name);
+    NimBLEDevice::setMTU(517);
 
-    server = BLEDevice::createServer();
+    server = NimBLEDevice::createServer();
     server->setCallbacks(new ServerCallbacks());
 
-    BLEService* svc = server->createService(NUS_SERVICE_UUID);
+    NimBLEService* svc = server->createService(NUS_SERVICE_UUID);
 
-    txChar = svc->createCharacteristic(
-        NUS_TX_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+    txChar = svc->createCharacteristic(NUS_TX_UUID, NIMBLE_PROPERTY::NOTIFY);
 
     rxChar = svc->createCharacteristic(
         NUS_RX_UUID,
-        BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
     rxChar->setCallbacks(new RxCallbacks());
 
     svc->start();
 
-    BLEAdvertising* adv = BLEDevice::getAdvertising();
+    NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
     adv->addServiceUUID(NUS_SERVICE_UUID);
     adv->setScanResponse(true);
     adv->setMinPreferred(0x06);
     adv->setMaxPreferred(0x12);
-    BLEDevice::startAdvertising();
+    NimBLEDevice::startAdvertising();
     Serial.printf("[ble] advertising as '%s'\n", device_name);
 }
 
