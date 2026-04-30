@@ -843,7 +843,7 @@
                 "ARDUINO=10812",
                 "ARDUINO_VARIANT=\"adafruit_feather_esp32s3_reversetft\"",
                 "ARDUINO_BOARD=\"Adafruit Feather ESP32-S3 Reverse TFT\"",
-                "ARDUINO_PARTITION_default",
+                "ARDUINO_PARTITION_min_spiffs",
                 ""
             ],
             "cStandard": "gnu17",
