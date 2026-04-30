@@ -10,7 +10,6 @@ namespace {
 constexpr uint32_t INITIAL_RECONNECT_MS = 2000;
 constexpr uint32_t MAX_RECONNECT_MS     = 30000;
 constexpr const char* AP_SSID_PREFIX    = "claude-buddy-";
-constexpr const char* AP_PASSWORD       = "claudebuddy";  // 8+ chars; WPA2 minimum
 
 void buildApSsid(char* out, size_t out_len) {
     uint8_t mac[6] = {0};
@@ -106,11 +105,14 @@ void WifiManager::enterApProvisioning() {
     ssid_[sizeof(ssid_) - 1] = 0;
 
     WiFi.mode(WIFI_AP);
-    if (!WiFi.softAP(ap_ssid, AP_PASSWORD)) {
+    // Open AP: passphrase=nullptr removes the WPA2 requirement so first-time
+    // users can join with one tap. The captive portal is the only thing
+    // reachable on the AP, and the AP only exists until creds are saved.
+    if (!WiFi.softAP(ap_ssid, nullptr)) {
         Serial.println("[wifi] softAP() failed");
         return;
     }
-    Serial.printf("[wifi] AP_PROVISIONING ssid=%s ip=%s\n",
+    Serial.printf("[wifi] AP_PROVISIONING ssid=%s (open) ip=%s\n",
                   ap_ssid, WiFi.softAPIP().toString().c_str());
 }
 
