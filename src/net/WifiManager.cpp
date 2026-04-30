@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <esp_mac.h>
 
 #include "../core/EventBus.h"
 
@@ -10,6 +11,12 @@ constexpr uint32_t INITIAL_RECONNECT_MS = 2000;
 constexpr uint32_t MAX_RECONNECT_MS     = 30000;
 constexpr const char* AP_SSID_PREFIX    = "claude-buddy-";
 constexpr const char* AP_PASSWORD       = "claudebuddy";  // 8+ chars; WPA2 minimum
+
+void buildApSsid(char* out, size_t out_len) {
+    uint8_t mac[6] = {0};
+    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+    snprintf(out, out_len, "%s%02X%02X", AP_SSID_PREFIX, mac[4], mac[5]);
+}
 }  // namespace
 
 WifiManager::WifiManager(ConfigStore& store)
@@ -91,12 +98,20 @@ bool WifiManager::isConnected() const {
 }
 
 void WifiManager::enterApProvisioning() {
-    // Filled in for real in step 5; here we just mark the state so the
-    // WifiCard can render the "no creds" hint and STA-only flows are
-    // exercised first.
     state_ = WifiState::AP_PROVISIONING;
-    ssid_[0] = 0;
-    Serial.println("[wifi] AP_PROVISIONING (no creds, AP not yet started)");
+
+    char ap_ssid[32];
+    buildApSsid(ap_ssid, sizeof(ap_ssid));
+    strncpy(ssid_, ap_ssid, sizeof(ssid_) - 1);
+    ssid_[sizeof(ssid_) - 1] = 0;
+
+    WiFi.mode(WIFI_AP);
+    if (!WiFi.softAP(ap_ssid, AP_PASSWORD)) {
+        Serial.println("[wifi] softAP() failed");
+        return;
+    }
+    Serial.printf("[wifi] AP_PROVISIONING ssid=%s ip=%s\n",
+                  ap_ssid, WiFi.softAPIP().toString().c_str());
 }
 
 void WifiManager::enterStaConnecting(uint32_t now_ms) {

@@ -66,9 +66,19 @@ void HttpServer::startSta() {
 }
 
 void HttpServer::startAp() {
-    // AP startup proper happens in WifiManager step 5. This branch is
-    // reachable now via the AP_PROVISIONING placeholder state, but does
-    // nothing until then.
+    server_ = new WebServer(HTTP_PORT);
+    registerApHandlers();
+    server_->begin();
+
+    dns_ = new DNSServer();
+    // Wildcard DNS: any A query on the AP returns 192.168.4.1 so the
+    // captive portal grabs whatever URL the client probes.
+    dns_->setErrorReplyCode(DNSReplyCode::NoError);
+    dns_->start(DNS_PORT, "*", WiFi.softAPIP());
+
+    Serial.printf("[http] AP listening on http://%s\n",
+                  WiFi.softAPIP().toString().c_str());
+
     role_ = Role::AP;
 }
 
@@ -113,5 +123,52 @@ void HttpServer::registerStaHandlers() {
 }
 
 void HttpServer::registerApHandlers() {
-    // Captive portal handlers land in step 5.
+    server_->on("/", HTTP_GET, [this]() {
+        // Tiny zero-dep form. Keep under one MTU.
+        String html =
+            "<!doctype html><meta name=viewport content='width=device-width'>"
+            "<title>claude-buddy setup</title>"
+            "<style>body{font:16px sans-serif;margin:24px;max-width:360px}"
+            "input,button{font:inherit;width:100%;padding:8px;margin:4px 0;"
+            "box-sizing:border-box}label{display:block;margin-top:12px}</style>"
+            "<h1>claude-buddy</h1><p>Pick a Wi-Fi network and enter the password.</p>"
+            "<form method=POST action=/save>"
+            "<label>SSID<input name=ssid maxlength=32 required></label>"
+            "<label>Password<input name=pass type=password maxlength=64></label>"
+            "<button type=submit>Save &amp; reboot</button></form>";
+        server_->send(200, "text/html", html);
+    });
+
+    server_->on("/save", HTTP_POST, [this]() {
+        if (!server_->hasArg("ssid")) {
+            server_->send(400, "text/plain", "missing ssid");
+            return;
+        }
+        String ssid = server_->arg("ssid");
+        String pass = server_->arg("pass");
+        if (!config_.setCreds(ssid.c_str(), pass.c_str())) {
+            server_->send(400, "text/plain", "invalid ssid/password length");
+            return;
+        }
+        server_->send(200, "text/html",
+            "<!doctype html><title>saved</title>"
+            "<h1>Saved</h1><p>Rebooting to join '"
+            + ssid + "'...</p>");
+        // Give the response a beat to flush before we drop the radio.
+        delay(500);
+        ESP.restart();
+    });
+
+    // Captive-portal probe URLs from common clients — redirect to /.
+    auto redirect = [this]() {
+        server_->sendHeader("Location", "http://192.168.4.1/", true);
+        server_->send(302, "text/plain", "");
+    };
+    server_->on("/generate_204",          HTTP_GET, redirect);  // Android
+    server_->on("/hotspot-detect.html",   HTTP_GET, redirect);  // iOS / macOS
+    server_->on("/connecttest.txt",       HTTP_GET, redirect);  // Windows
+    server_->on("/redirect",              HTTP_GET, redirect);
+    server_->on("/ncsi.txt",              HTTP_GET, redirect);
+
+    server_->onNotFound(redirect);
 }
