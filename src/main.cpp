@@ -8,6 +8,7 @@
 #include "core/ConfigStore.h"
 #include "display/Display.h"
 #include "input/InputRouter.h"
+#include "net/HttpServer.h"
 #include "net/WifiManager.h"
 #include "prompt_ui.h"
 #include "protocol.h"
@@ -33,6 +34,7 @@ static const uint8_t  BTN_CENTER_PRESSED_LEVEL = HIGH;  // GPIO1 / D1
 
 static ConfigStore  configStore;
 static WifiManager  wifiManager{configStore};
+static HttpServer   httpServer{wifiManager, appState, configStore};
 
 static StatusCard  statusCard{appState};
 static EyesCard    eyesCard{appState};
@@ -147,6 +149,7 @@ void setup() {
     }
 #endif
     wifiManager.begin();
+    httpServer.begin();
 
     appState.setBuddyState(state_derive(appState.status(), appState.isLive(millis())));
     statusCard.invalidate();
@@ -189,6 +192,7 @@ void loop() {
 
     uint32_t now = millis();
     wifiManager.tick(now);
+    httpServer.tick(now);
     appState.setBuddyState(state_derive(appState.status(), appState.isLive(now)));
 
     prompt_ui_update(&promptUi, appState.status().prompt, appState.isLive(now), now);
