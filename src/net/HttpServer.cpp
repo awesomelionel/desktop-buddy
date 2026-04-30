@@ -535,25 +535,18 @@ void HttpServer::registerStaHandlers() {
             return;
         }
 
-        // WebServer collapses repeated 'order' values into a comma-joined
-        // string via arg("order"); split it.
+        // Repeated 'order' fields each become a separate args() entry;
+        // walk the full list to collect them in submit order.
         uint8_t order[settings::CARD_COUNT] = {0};
         uint8_t count = 0;
-        if (server_->hasArg("order")) {
-            String all = server_->arg("order");
-            int start = 0;
-            while (start < (int)all.length() && count < settings::CARD_COUNT) {
-                int comma = all.indexOf(',', start);
-                int end = comma < 0 ? (int)all.length() : comma;
-                long v = all.substring(start, end).toInt();
-                if (v < 0 || v >= settings::CARD_COUNT) {
-                    sendJsonError(server_, 400, "order has bad card id");
-                    return;
-                }
-                order[count++] = (uint8_t)v;
-                if (comma < 0) break;
-                start = comma + 1;
+        for (int i = 0; i < server_->args() && count < settings::CARD_COUNT; ++i) {
+            if (server_->argName(i) != "order") continue;
+            long v = server_->arg(i).toInt();
+            if (v < 0 || v >= settings::CARD_COUNT) {
+                sendJsonError(server_, 400, "order has bad card id");
+                return;
             }
+            order[count++] = (uint8_t)v;
         }
 
         char err[64] = {};
