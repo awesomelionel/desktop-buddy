@@ -116,6 +116,98 @@ void HttpServer::stop() {
 }
 
 void HttpServer::registerStaHandlers() {
+    server_->on("/", HTTP_GET, [this]() {
+        // Tiny status dashboard. Pulls live values from /status every 3s
+        // via fetch so reloading the page isn't required.
+        const ClaudeStatus& s   = app_.status();
+        const uint32_t      now = millis();
+        String out;
+        out.reserve(1024);
+        out +=
+            "<!doctype html><meta charset=utf-8>"
+            "<meta name=viewport content='width=device-width,initial-scale=1'>"
+            "<title>";
+        out += app_.deviceName();
+        out += "</title><style>"
+            "body{font:15px -apple-system,system-ui,sans-serif;margin:24px auto;"
+            "max-width:420px;padding:0 12px;color:#222;background:#f6f6f6}"
+            "h1{font-size:20px;margin:0 0 .25em}"
+            ".sub{color:#666;margin:0 0 1.25em}"
+            ".card{background:#fff;border:1px solid #e3e3e3;border-radius:8px;"
+            "padding:14px 16px;margin:0 0 12px}"
+            ".row{display:flex;justify-content:space-between;align-items:baseline;"
+            "padding:6px 0;border-bottom:1px solid #f0f0f0}"
+            ".row:last-child{border-bottom:0}"
+            ".k{color:#666;font-size:13px}"
+            ".v{font-weight:600;font-feature-settings:'tnum'}"
+            ".badge{display:inline-block;padding:2px 8px;border-radius:99px;"
+            "font-size:12px;font-weight:600;color:#fff;background:#999}"
+            ".live{background:#1a7f37}.offln{background:#c93232}"
+            ".msg{font:13px ui-monospace,monospace;color:#444;word-break:break-word}"
+            "footer{color:#999;font-size:12px;text-align:center;margin-top:16px}"
+            "a{color:#0969da;text-decoration:none}a:hover{text-decoration:underline}"
+            "</style>";
+
+        out += "<h1>";
+        out += app_.deviceName();
+        out += " <span id=live class='badge ";
+        out += app_.isLive(now) ? "live'>LIVE" : "offln'>OFFLN";
+        out += "</span></h1>";
+        out += "<p class=sub>";
+        out += wifi_.ssid();
+        out += " &middot; ";
+        out += wifi_.ip().toString();
+        out += "</p>";
+
+        out += "<div class=card>"
+               "<div class=row><span class=k>state</span>"
+               "<span class=v id=state>";
+        out += state_name(app_.buddyState());
+        out += "</span></div>"
+               "<div class=row><span class=k>total</span>"
+               "<span class=v id=total>";
+        out += s.total;
+        out += "</span></div>"
+               "<div class=row><span class=k>running</span>"
+               "<span class=v id=running>";
+        out += s.running;
+        out += "</span></div>"
+               "<div class=row><span class=k>waiting</span>"
+               "<span class=v id=waiting>";
+        out += s.waiting;
+        out += "</span></div></div>";
+
+        out += "<div class=card><div class=k style='margin-bottom:6px'>last msg</div>"
+               "<div id=msg class=msg>";
+        if (s.msg[0]) out += s.msg;
+        else          out += "&mdash;";
+        out += "</div></div>";
+
+        out += "<footer>uptime ";
+        out += String((now - boot_ms_) / 1000);
+        out += "s &middot; <a href=/status>raw json</a></footer>";
+
+        out +=
+            "<script>"
+            "async function tick(){"
+              "try{"
+                "const j=await(await fetch('/status')).json();"
+                "document.getElementById('state').textContent=j.claude_state;"
+                "document.getElementById('total').textContent=j.status.total;"
+                "document.getElementById('running').textContent=j.status.running;"
+                "document.getElementById('waiting').textContent=j.status.waiting;"
+                "document.getElementById('msg').textContent=j.status.msg||'\\u2014';"
+                "const b=document.getElementById('live');"
+                "b.className='badge '+(j.live?'live':'offln');"
+                "b.textContent=j.live?'LIVE':'OFFLN';"
+              "}catch(e){}"
+            "}"
+            "setInterval(tick,3000);"
+            "</script>";
+
+        server_->send(200, "text/html", out);
+    });
+
     server_->on("/status", HTTP_GET, [this]() {
         // Hand-built JSON: ArduinoJson would pull in another ~10KB+ for
         // a single fixed-shape document. Only `msg` carries arbitrary
