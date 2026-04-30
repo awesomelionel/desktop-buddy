@@ -3,6 +3,7 @@
 #include "core/AppState.h"
 #include "core/ConfigStore.h"
 #include "core/EventBus.h"
+#include "core/Settings.h"
 #include "display/Display.h"
 #include "input/InputRouter.h"
 #include "net/BleLink.h"
@@ -23,6 +24,7 @@ static const uint32_t FRAME_PACING_MS          = 16;
 static Display      display;
 static AppState     appState;
 static EventBus     eventBus;
+static Settings     settings;
 static ConfigStore  configStore;
 static WifiManager  wifiManager{configStore};
 static HttpServer   httpServer{wifiManager, appState, configStore};
@@ -53,7 +55,11 @@ void setup() {
     Serial.begin(115200);
     delay(200);
 
-    appState.initDeviceName();
+    appState.initMacDeviceName();
+    settings.setEventBus(&eventBus);
+    settings.begin(appState.macDeviceName());
+    appState.setSettings(&settings);
+
     display.begin();
     inputRouter.begin();
     prompt_ui_init(&promptUi);

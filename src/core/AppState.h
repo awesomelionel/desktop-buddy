@@ -5,26 +5,39 @@
 #include "protocol.h"
 #include "state.h"
 
+class Settings;
+
 // Owns the snapshot-derived state: latest ClaudeStatus, derived BuddyState,
 // time of last received snapshot, and the BLE device name. Render code reads
 // it via const reference; the input/networking layer mutates via setters.
+//
+// Liveness threshold comes from Settings (settable from the web UI). The
+// device_name field is the MAC-derived seed; the user-visible name lives on
+// Settings and is read via deviceName().
 class AppState {
 public:
-    static constexpr uint32_t LIVE_TIMEOUT_MS = 30000;
-
     AppState();
 
-    // Populate device_name_ from the BT MAC. Safe to call once setup-time.
-    void initDeviceName();
+    // Populate macDeviceName_ from the BT MAC ("Claude-XXXX"). Safe to call
+    // once at setup time.
+    void initMacDeviceName();
 
-    const char*         deviceName() const { return device_name_; }
+    // Bind Settings so isLive() and deviceName() can read live values.
+    void setSettings(const Settings* settings) { settings_ = settings; }
+
+    // The MAC-derived seed name; used by Settings::begin() as the default
+    // device name on first boot.
+    const char* macDeviceName() const { return mac_device_name_; }
+
+    // The user-visible device name. Falls back to the MAC-derived seed if
+    // Settings hasn't been bound yet.
+    const char* deviceName() const;
+
     const ClaudeStatus& status()     const { return status_; }
     BuddyState          buddyState() const { return buddy_state_; }
     uint32_t            lastSnapshotMs() const { return last_snapshot_ms_; }
 
-    bool isLive(uint32_t now_ms) const {
-        return last_snapshot_ms_ != 0 && (now_ms - last_snapshot_ms_) <= LIVE_TIMEOUT_MS;
-    }
+    bool isLive(uint32_t now_ms) const;
 
     // Mutators used by the BLE/input layers.
     ClaudeStatus& mutableStatus() { return status_; }
@@ -32,8 +45,9 @@ public:
     void          setBuddyState(BuddyState s) { buddy_state_ = s; }
 
 private:
-    char         device_name_[16];
-    ClaudeStatus status_;
-    BuddyState   buddy_state_;
-    uint32_t     last_snapshot_ms_;
+    char            mac_device_name_[16];
+    ClaudeStatus    status_;
+    BuddyState      buddy_state_;
+    uint32_t        last_snapshot_ms_;
+    const Settings* settings_ = nullptr;
 };
