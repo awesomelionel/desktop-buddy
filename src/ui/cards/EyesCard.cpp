@@ -62,8 +62,12 @@ const float    kCos15               = 0.9659258f;  // cosf(0.2618f)
 const float    kSin15               = 0.2588190f;  // sinf(0.2618f)
 
 // Per-frame erase rect for one eye (covers rotated 30×11 max bbox + ±drift).
-const int      kWorkEraseW          = 52;     // = 32 (bbox) + 2*kWorkDriftAmp + 4 margin
-const int      kWorkEraseH          = 17;     // = 30*sin15 + 11*cos15 + small margin
+// At peak breathe (h=11) the rotated corners reach ±9 px vertically and
+// ±16 px horizontally about the eye centre; the previous 17 px height left
+// the topmost/bottommost corner row outside the erase, so drifting the eye
+// laterally trailed a 1-px ghost from the previous frame.
+const int      kWorkEraseW          = 54;     // = 2*16 (bbox) + 2*kWorkDriftAmp + 6 margin
+const int      kWorkEraseH          = 21;     // = 2*9 (bbox) + 3 margin
 
 // Dots erase rect — covers all three positions (5 px dots).
 const int      kDotsEraseX          = 180;
