@@ -132,7 +132,12 @@ void EyesCard::armState(BuddyState state, uint32_t now) {
             glance_swing_pending_ = false;
             break;
         case STATE_WORKING:
-            scan_epoch_ms_ = now;
+            scan_epoch_ms_              = now;
+            next_work_blink_ms_         = now + kWorkBlinkIntervalMs;
+            work_blink_step_deadline_ms_ = 0;
+            draw_work_blink_i_          = -1;
+            draw_blink_h_               = -1;
+            draw_dots_n_                = 0;
             break;
         case STATE_WAITING:
             blink_i_       = -1;
@@ -200,13 +205,42 @@ void EyesCard::tick(uint32_t now_ms) {
             break;
 
         case STATE_WORKING: {
-            float ph = (now_ms - scan_epoch_ms_) * (2.0f * 3.14159265f) / 1000.0f;
-            draw_dx_     = (int16_t)(sinf(ph) * 30.0f);
-            draw_base_y_ = kBaseIdleY;
-            draw_h_      = 30;
-            // Integer-only drip: 0→kDripSteps px over kDripMs, then snaps back.
-            draw_sweat_y_ = (int8_t)((now_ms - scan_epoch_ms_) % kDripMs
-                                     * kDripSteps / kDripMs);
+            const uint32_t t = now_ms - scan_epoch_ms_;
+            const float    twoPi = 2.0f * 3.14159265f;
+
+            // Slow horizontal gaze drift, 1.4 s period.
+            draw_dx_ = (int16_t)lroundf(kWorkDriftAmp *
+                          sinf(twoPi * (float)t / (float)kWorkDriftMs));
+
+            // Breathing height, 1.1 s period — h ∈ [7, 11].
+            const int breathe_h = kWorkBaseH +
+                (int)lroundf(kWorkBreatheAmp *
+                             sinf(twoPi * (float)t / (float)kWorkBreatheMs));
+
+            // Rare blink, separate timer from IDLE/WAITING blink_i_.
+            if (draw_work_blink_i_ >= 0) {
+                if (now_ms >= work_blink_step_deadline_ms_) {
+                    draw_work_blink_i_++;
+                    if (draw_work_blink_i_ >= kWorkBlinkN) {
+                        draw_work_blink_i_   = -1;
+                        next_work_blink_ms_  = now_ms + kWorkBlinkIntervalMs;
+                    } else {
+                        work_blink_step_deadline_ms_ = now_ms + kWorkBlinkStepMs;
+                    }
+                }
+            } else if (now_ms >= next_work_blink_ms_) {
+                draw_work_blink_i_           = 0;
+                work_blink_step_deadline_ms_ = now_ms + kWorkBlinkStepMs;
+            }
+
+            // Final eye height: blink overrides breathing if a blink is in progress.
+            const bool blinking = (draw_work_blink_i_ >= 0);
+            draw_h_       = blinking ? kWorkBlinkH[draw_work_blink_i_] : breathe_h;
+            draw_blink_h_ = blinking ? (int8_t)kWorkBlinkH[draw_work_blink_i_] : (int8_t)-1;
+            draw_base_y_  = kBaseIdleY;
+
+            // Typing dots: 0..3 over 1.5 s (4 phases × 375 ms each).
+            draw_dots_n_ = (uint8_t)((t / (kWorkDotsMs / 4u)) % 4u);
             break;
         }
 
@@ -235,7 +269,8 @@ void EyesCard::render(Display& display) {
     bool stateJustChanged = !frame_valid_ || (last_state_ != bs);
     // Per CLAUDE.md: incremental DISCONNECTED frames must use a partial erase
     // to avoid the ~13 ms full-screen flash that causes flicker at 62 fps.
-    bool full_clear = stateJustChanged || (bs != STATE_DISCONNECTED);
+    bool full_clear = stateJustChanged ||
+                      (bs != STATE_DISCONNECTED && bs != STATE_WORKING);
     drawFrame(display.tft(), bs, full_clear);
 
     last_state_    = bs;
@@ -291,28 +326,34 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
         return;
     }
 
-    tft.fillScreen(ST77XX_BLACK);
-
     if (state == STATE_WORKING) {
-        // "> <" squint — left eye ">" (tip left), right eye "<" (tip right)
-        int cy   = draw_base_y_ + 15;
-        int half = kActionH / 2;
-        int lx   = kLeftX  + draw_dx_;
-        int rx   = kRightX + draw_dx_;
-        tft.fillTriangle(lx,         cy,
-                         lx + kEyeW, cy - half,
-                         lx + kEyeW, cy + half, ST77XX_WHITE);
-        tft.fillTriangle(rx,         cy - half,
-                         rx,         cy + half,
-                         rx + kEyeW, cy,        ST77XX_WHITE);
-        // Sweat drop: triangle tip + circle body, drips kDripSteps px then resets.
-        int ty = kSweatTipY + draw_sweat_y_;
-        tft.fillTriangle(kSweatCX - 4, ty + 8,
-                         kSweatCX + 4, ty + 8,
-                         kSweatCX,     ty,      kSweatBlue);
-        tft.fillCircle(kSweatCX, ty + 13, 5, kSweatBlue);
+        // Per-frame partial erase — see CLAUDE.md "never fillScreen in continuous animations."
+        // State entry does one fillScreen; steady frames erase only the dirty rects.
+        if (full_clear) {
+            tft.fillScreen(ST77XX_BLACK);
+        } else {
+            tft.fillRect(kWorkLeftCx  - kWorkEraseW / 2,
+                         kWorkEyeCy   - kWorkEraseH / 2,
+                         kWorkEraseW, kWorkEraseH, ST77XX_BLACK);
+            tft.fillRect(kWorkRightCx - kWorkEraseW / 2,
+                         kWorkEyeCy   - kWorkEraseH / 2,
+                         kWorkEraseW, kWorkEraseH, ST77XX_BLACK);
+            tft.fillRect(kDotsEraseX, kDotsEraseY,
+                         kDotsEraseW, kDotsEraseH, ST77XX_BLACK);
+        }
+
+        // Furrowed slit eyes — left eye +15°, right eye -15°.
+        drawRotatedSlit(tft, kWorkLeftCx  + draw_dx_, kWorkEyeCy, draw_h_, +1);
+        drawRotatedSlit(tft, kWorkRightCx + draw_dx_, kWorkEyeCy, draw_h_, -1);
+
+        // Typing dots — draw the leftmost draw_dots_n_ of three.
+        for (uint8_t i = 0; i < draw_dots_n_; i++) {
+            tft.fillCircle(kDotsX[i], kDotsY, kDotR, ST77XX_WHITE);
+        }
         return;
     }
+
+    tft.fillScreen(ST77XX_BLACK);
 
     int h = draw_h_;
     if (h <= 0) return;
