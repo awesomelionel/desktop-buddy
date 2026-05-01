@@ -46,6 +46,13 @@ private:
     int16_t    draw_base_y_;
     int8_t     draw_sweat_y_;
 
+    // STATE_WORKING — rare blink, separate timer to avoid coupling with IDLE/WAITING blink_i_.
+    uint32_t   next_work_blink_ms_;
+    uint32_t   work_blink_step_deadline_ms_;
+    int8_t     draw_work_blink_i_;        // -1 between blinks, else 0..kWorkBlinkN-1
+    int8_t     draw_blink_h_;             // current blink-step height, or -1 when not blinking
+    uint8_t    draw_dots_n_;              // typing-dots count, 0..3
+
     // Dirty-tracking against the last rendered frame: a snapshot of the
     // draw outputs so isDirty() can flip true any time the animation moved.
     bool       frame_valid_;
@@ -54,5 +61,7 @@ private:
     int16_t    last_dx_;
     int16_t    last_base_y_;
     int8_t     last_sweat_y_;
+    int8_t     last_blink_h_;
+    uint8_t    last_dots_n_;
     uint32_t   last_disc_age_;
 };
