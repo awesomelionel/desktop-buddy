@@ -7,6 +7,7 @@ class DNSServer;
 class WifiManager;
 class ConfigStore;
 class AppState;
+class Settings;
 
 // HTTP server with two roles, same WebServer instance:
 //   STA mode → JSON API (start with GET /status)
@@ -17,7 +18,8 @@ class AppState;
 // loop) and it will start/stop endpoints as needed.
 class HttpServer {
 public:
-    HttpServer(WifiManager& wifi, const AppState& app, ConfigStore& config);
+    HttpServer(WifiManager& wifi, const AppState& app, ConfigStore& config,
+               Settings& settings);
     ~HttpServer();
 
     void begin();
@@ -35,6 +37,7 @@ private:
     WifiManager&    wifi_;
     const AppState& app_;
     ConfigStore&    config_;
+    Settings&       settings_;
 
     WebServer*  server_;
     DNSServer*  dns_;

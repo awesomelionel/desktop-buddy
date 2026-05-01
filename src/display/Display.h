@@ -17,6 +17,13 @@ public:
     int width()  const { return W; }
     int height() const { return H; }
 
+    // Backlight control. setBacklight(false) cuts the TFT_BACKLITE pin to
+    // low (display goes dark; pixels keep their state). setBacklight(true)
+    // restores it. isAsleep() reflects the last call.
+    void setBacklight(bool on);
+    bool isAsleep() const { return asleep_; }
+
 private:
     Adafruit_ST7789 tft_;
+    bool            asleep_ = false;
 };

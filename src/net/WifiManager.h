@@ -57,6 +57,8 @@ private:
     void enterStaReconnect(uint32_t now_ms);
     void enterStaConnected();
 
+    static constexpr uint8_t MAX_RECONNECT_ATTEMPTS = 5;
+
     ConfigStore& store_;
     EventBus*    bus_ = nullptr;
     WifiState    state_;
@@ -64,4 +66,5 @@ private:
     char         password_[ConfigStore::PASS_MAX_LEN + 1];
     uint32_t     reconnect_at_ms_;
     uint32_t     reconnect_delay_ms_;  // exponential backoff
+    uint8_t      reconnect_attempts_;  // gives up to AP after MAX
 };

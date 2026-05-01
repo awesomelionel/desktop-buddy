@@ -14,4 +14,10 @@ void Display::begin() {
     tft_.setRotation(1);
     tft_.fillScreen(ST77XX_BLACK);
     tft_.setTextWrap(false);
+    asleep_ = false;
+}
+
+void Display::setBacklight(bool on) {
+    digitalWrite(TFT_BACKLITE, on ? HIGH : LOW);
+    asleep_ = !on;
 }

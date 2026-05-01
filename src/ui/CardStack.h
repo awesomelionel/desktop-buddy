@@ -15,6 +15,14 @@ class CardStack {
 public:
     void addCard(Card* card);
 
+    // Removes all carousel cards (overlay is also dropped). After clear(),
+    // the next active() returns nullptr until cards are re-added.
+    void clear();
+
+    // Set the carousel index directly (clamped). Invalidates the now-active
+    // card so it repaints. No-op if an overlay is set.
+    void setIndex(size_t i);
+
     // Push an overlay card on top of the carousel. Pop with clearOverlay().
     // Both transitions invalidate the now-visible card so it repaints.
     void pushOverlay(Card* card);

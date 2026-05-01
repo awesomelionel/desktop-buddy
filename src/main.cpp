@@ -3,6 +3,7 @@
 #include "core/AppState.h"
 #include "core/ConfigStore.h"
 #include "core/EventBus.h"
+#include "core/Settings.h"
 #include "display/Display.h"
 #include "input/InputRouter.h"
 #include "net/BleLink.h"
@@ -23,13 +24,15 @@ static const uint32_t FRAME_PACING_MS          = 16;
 static Display      display;
 static AppState     appState;
 static EventBus     eventBus;
+static Settings     settingsStore;  // class Settings (the wrapper); the lowercase 'settings' namespace lives in lib/settings, so we name the global differently to avoid a token clash.
 static ConfigStore  configStore;
 static WifiManager  wifiManager{configStore};
-static HttpServer   httpServer{wifiManager, appState, configStore};
+static HttpServer   httpServer{wifiManager, appState, configStore, settingsStore};
 static BleLink      bleLink{appState};
 
 static PromptUi     promptUi = {};
 static CardController cardController{appState, eventBus, wifiManager, promptUi, bleLink,
+                                     settingsStore,
                                      PIN_BTN_NEXT, BTN_NEXT_PRESSED_LEVEL,
                                      PIN_BTN_PREV, BTN_PREV_PRESSED_LEVEL};
 static InputRouter  inputRouter{PIN_BTN_NEXT,   BTN_NEXT_PRESSED_LEVEL,
@@ -53,12 +56,17 @@ void setup() {
     Serial.begin(115200);
     delay(200);
 
-    appState.initDeviceName();
+    appState.initMacDeviceName();
+    settingsStore.setEventBus(&eventBus);
+    settingsStore.begin(appState.macDeviceName());
+    appState.setSettings(&settingsStore);
+
     display.begin();
     inputRouter.begin();
     prompt_ui_init(&promptUi);
     configStore.begin();
 
+    cardController.setInputRouter(&inputRouter);
     cardController.begin();
 
     // Hold center 5s to wipe Wi-Fi creds and reboot into the captive
@@ -74,6 +82,8 @@ void setup() {
     drawSplash();
 
     bleLink.setEventBus(&eventBus);
+    bleLink.setSettings(&settingsStore);
+    bleLink.registerEvents();
     wifiManager.setEventBus(&eventBus);
     bleLink.begin(appState.deviceName());
 

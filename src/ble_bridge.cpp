@@ -78,6 +78,16 @@ void ble_init(const char* device_name) {
     Serial.printf("[ble] advertising as '%s'\n", device_name);
 }
 
+void ble_set_device_name(const char* device_name) {
+    if (!device_name || !device_name[0]) return;
+    // The Bluedroid BLEDevice API doesn't expose a clean live-rename;
+    // calling esp_ble_gap_set_device_name directly requires headers that
+    // arent on the standard PlatformIO include path. The new name is
+    // already in NVS — the next boot will advertise under it. Trigger
+    // a reboot from the HTTP layer if the rename should take effect now.
+    Serial.printf("[ble] rename to '%s' pending reboot\n", device_name);
+}
+
 bool   ble_connected() { return connected; }
 size_t ble_available() { return (rxHead + RX_CAP - rxTail) % RX_CAP; }
 int    ble_read() {

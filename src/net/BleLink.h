@@ -5,6 +5,7 @@
 
 class AppState;
 class EventBus;
+class Settings;
 
 // Wraps the C-style ble_bridge module: drains incoming bytes, accumulates
 // them into a 4KB line buffer (per REFERENCE.md), parses each line into
@@ -19,6 +20,14 @@ public:
     // line parse.
     void setEventBus(EventBus* bus) { bus_ = bus; }
 
+    // Bind Settings so we can react to device-name changes via the
+    // SettingsChanged event. Caller-owned; lifetime must outlive BleLink.
+    void setSettings(const Settings* settings) { settings_ = settings; }
+
+    // Subscribe handlers on the bound EventBus. Call after both
+    // setEventBus() and setSettings() are wired.
+    void registerEvents();
+
     // Drain available bytes; for each completed JSON line, parse into
     // appState and stamp markSnapshot(now_ms).
     void tick(uint32_t now_ms);
@@ -29,8 +38,10 @@ public:
     bool isConnected() const;
 
 private:
-    AppState& app_;
-    EventBus* bus_ = nullptr;
+    AppState&       app_;
+    EventBus*       bus_      = nullptr;
+    const Settings* settings_ = nullptr;
+    char            current_name_[16] = {0};
 
     // Snapshot lines can carry an entries[] transcript; REFERENCE.md caps
     // event payloads at 4KB. 4096 + 1 trailing null = max wire size.

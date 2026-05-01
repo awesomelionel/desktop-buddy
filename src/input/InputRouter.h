@@ -22,8 +22,13 @@ public:
 
     void begin();
 
-    // Reads the buttons, debounces, returns the resulting event.
+    // Reads the buttons, debounces, returns the resulting event. Updates
+    // lastInputMs() on every non-NONE event so sleep timers can reset.
     ButtonEvent update(uint32_t now_ms);
+
+    // Timestamp of the last non-NONE button event observed by update().
+    // Used by the sleep manager to gate the backlight.
+    uint32_t lastInputMs() const { return last_input_ms_; }
 
     // Routes `ev` to the active card; if the card returns false, treats
     // BTN_UP / BTN_DOWN as carousel prev/next.
@@ -57,4 +62,6 @@ private:
     bool        center_held_         = false;
     uint32_t    center_press_ms_     = 0;
     bool        center_long_fired_   = false;
+
+    uint32_t    last_input_ms_       = 0;
 };
