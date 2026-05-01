@@ -42,6 +42,41 @@ const uint32_t kGlanceJitterMs  = 2000;
 const uint32_t kGlanceHoldMs    = 600;
 const int      kGlanceDy        = -10;  // negative = up; applied while glancing
 
+// ---- STATE_WORKING (focused-thinking redesign) ----
+// All times in ms; angles in radians.
+const uint32_t kWorkBreatheMs       = 1100;
+const uint32_t kWorkDriftMs         = 1400;
+const uint32_t kWorkDotsMs          = 1500;
+const uint32_t kWorkBlinkIntervalMs = 7000;
+const uint32_t kWorkBlinkStepMs     = 40;     // 7 steps × 40 ms = 280 ms total
+const int      kWorkBaseH           = 9;
+const int      kWorkBreatheAmp      = 2;      // h ranges 7..11
+const int      kWorkDriftAmp        = 8;      // dx ranges -8..+8
+const float    kWorkRotRad          = 0.2618f; // 15° in radians
+const uint8_t  kWorkBlinkH[]        = {9, 6, 3, 0, 3, 6, 9};
+const int      kWorkBlinkN          = 7;
+
+const int      kWorkLeftCx          = 45;     // matches kLeftX  + kEyeW/2
+const int      kWorkRightCx         = 195;    // matches kRightX + kEyeW/2
+const int      kWorkEyeCy           = 67;     // matches kBaseIdleY + 15
+const int      kDotsX[3]            = {184, 194, 204};
+const int      kDotsY               = 22;
+const int      kDotR                = 2;      // 5 px diameter via fillCircle r=2
+
+// Rotation basis — precomputed; width is fixed at kEyeW.
+const float    kCos15               = 0.9659258f;  // cosf(0.2618f)
+const float    kSin15               = 0.2588190f;  // sinf(0.2618f)
+
+// Per-frame erase rect for one eye (covers rotated 30×11 max bbox + ±drift).
+const int      kWorkEraseW          = 52;     // = 32 (bbox) + 2*kWorkDriftAmp + 4 margin
+const int      kWorkEraseH          = 17;     // = 30*sin15 + 11*cos15 + small margin
+
+// Dots erase rect — covers all three positions (5 px dots).
+const int      kDotsEraseX          = 180;
+const int      kDotsEraseY          = kDotsY - 3;
+const int      kDotsEraseW          = 30;
+const int      kDotsEraseH          = 7;
+
 }  // namespace
 
 EyesCard::EyesCard(const AppState& state)
