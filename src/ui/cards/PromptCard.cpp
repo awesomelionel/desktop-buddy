@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "../../display/Display.h"
+#include "../Footer.h"
 
 PromptCard::PromptCard(PromptUi& ui)
     : ui_(ui),
@@ -97,12 +98,7 @@ void PromptCard::render(Display& display) {
     }
 
     if (has_footer_) {
-        tft.setTextSize(1);
-        tft.setTextColor(footer_live_ ? ST77XX_GREEN : ST77XX_RED, ST77XX_BLACK);
-        tft.setCursor(8, 118);
-        tft.print(footer_live_ ? "LIVE  " : "OFFLN ");
-        tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-        tft.print(footer_device_);
+        ui::drawFooter(tft, footer_device_, footer_live_);
     }
 
     last_visible_  = v.visible;
