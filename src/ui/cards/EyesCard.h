@@ -55,6 +55,20 @@ private:
     int8_t     draw_blink_h_;             // current blink-step height, or -1 when not blinking
     uint8_t    draw_dots_n_;              // typing-dots count, 0..3
 
+    // ---- STATE_WAITING ----
+    uint32_t   wait_scan_epoch_ms_;
+    int8_t     draw_wait_gaze_dy_;        // 0..kWaitGlanceDownDy
+
+    struct QBubble {
+        uint32_t born_ms;
+        int8_t   slot_x_offset;
+        int8_t   slot_y_offset;
+        uint8_t  size;
+        bool     alive;
+    };
+    QBubble    q_bubbles_[8];     // capacity = kQBubbleCap
+    uint32_t   next_q_spawn_ms_;
+
     // Dirty-tracking against the last rendered frame: a snapshot of the
     // draw outputs so isDirty() can flip true any time the animation moved.
     bool       frame_valid_;
@@ -65,4 +79,7 @@ private:
     int8_t     last_blink_h_;
     uint8_t    last_dots_n_;
     uint32_t   last_disc_age_;
+    int8_t     last_wait_gaze_dy_;
+    bool       last_badge_visible_;
+    uint32_t   last_q_anim_tick_;   // bumped every frame while bubbles are live
 };

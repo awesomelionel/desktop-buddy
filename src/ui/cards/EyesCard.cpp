@@ -75,6 +75,41 @@ const int      kDotsEraseY          = kDotsY - 3;
 const int      kDotsEraseW          = 30;
 const int      kDotsEraseH          = 7;
 
+// ---- STATE_WAITING redesign (collapsed-prompt eyes) ----
+const int      kBaseWaitYNew         = 22;     // top of eye when neutral; was 32, raised so down-glance has clearance
+const int      kWaitGlanceDownDy     = 14;     // additional eye-top y when glancing at the badge
+const uint32_t kWaitScanPeriodMs     = 2000;   // full forward → down → forward cycle
+const uint32_t kWaitScanEaseMs       = 250;    // cubic ease in / out duration
+const uint32_t kWaitScanHoldDownMs   = 400;    // dwell at the down position
+const uint32_t kWaitBlinkIntervalMs  = 4500;   // identical to IDLE
+const uint32_t kWaitBlinkStepMs      = 70;
+
+// Question-mark cluster
+const uint32_t kQIntervalMs  = 3200;
+const uint32_t kQLifetimeMs  = 3500;
+const int      kQRiseY       = 32;
+const int      kQDriftX      = 24;
+const int      kQClusterN    = 5;
+const int      kQBubbleCap   = 8;     // ring capacity (allows brief overlap)
+const int      kQAnchorX     = 120;   // face centre
+const int      kQAnchorY     = kBaseWaitYNew + 30 / 2 + 8;  // eye-mid + 8 = 45
+const int8_t   kQSlotsX[5]   = { -14,  -6,   0,   7,  14 };
+const int8_t   kQSlotsY[5]   = {   6,   1,   0,   2,   7 };
+const uint16_t kQStaggerMs[5] = {  0,  60, 130, 200, 280 };
+const uint8_t  kQSizes[5]    = {  28,  14,  28,  14,  28 };
+
+// Bright orange in RGB565: r=31, g=29, b=0 → (31<<11)|(29<<5)|0 = 0xFBA0
+const uint16_t kQColor       = 0xFBA0;
+
+// Badge geometry (sits above the shared 18-px footer)
+const int      kBadgeH       = 18;
+const int      kBadgeMargin  = 8;
+const int      kBadgeX       = kBadgeMargin;
+const int      kBadgeW       = 240 - 2 * kBadgeMargin;
+const int      kBadgeBottomGap = 4;
+// kFooterH = 18 from src/ui/Footer.h
+const int      kBadgeY       = 135 - 18 - kBadgeBottomGap - kBadgeH;  // 95
+
 }  // namespace
 
 EyesCard::EyesCard(const AppState& state, const PromptUi& prompt)
@@ -88,6 +123,9 @@ EyesCard::EyesCard(const AppState& state, const PromptUi& prompt)
     last_blink_h_  = -1;
     last_dots_n_   = 0;
     last_disc_age_ = 0xFFFFFFFFu;
+    last_wait_gaze_dy_   = 0;
+    last_badge_visible_  = false;
+    last_q_anim_tick_    = 0;
 }
 
 void EyesCard::invalidate() {
@@ -117,6 +155,15 @@ void EyesCard::resetAnim() {
     draw_work_blink_i_            = -1;
     draw_blink_h_                 = -1;
     draw_dots_n_                  = 0;
+
+    wait_scan_epoch_ms_       = now;
+    draw_wait_gaze_dy_        = 0;
+    next_q_spawn_ms_          = now;
+    for (auto& b : q_bubbles_) b.alive = false;
+
+    last_wait_gaze_dy_        = 0;
+    last_badge_visible_       = false;
+    last_q_anim_tick_         = 0;
 }
 
 void EyesCard::armState(BuddyState state, uint32_t now) {
