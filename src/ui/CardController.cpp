@@ -124,16 +124,17 @@ void CardController::tick(uint32_t now_ms, Display& display) {
     prompt_ui_update(&prompt_, app_.status().prompt, app_.isLive(now_ms), now_ms);
 
     PromptView pv = prompt_ui_view(&prompt_);
-    if (pv.visible && !stack_.hasOverlay()) {
+    const bool want_overlay = (pv.mode == PROMPT_UI_EXPANDED);
+    if (want_overlay && !stack_.hasOverlay()) {
         prompt_card_.setFooter(app_.deviceName(), app_.isLive(now_ms));
         stack_.pushOverlay(&prompt_card_);
         prompt_visible_ = true;
         bus_.publish(EventKind::PromptShow);
-    } else if (!pv.visible && stack_.hasOverlay()) {
+    } else if (!want_overlay && stack_.hasOverlay()) {
         stack_.clearOverlay();
         prompt_visible_ = false;
         bus_.publish(EventKind::PromptHide);
-    } else if (pv.visible) {
+    } else if (want_overlay) {
         prompt_card_.setFooter(app_.deviceName(), app_.isLive(now_ms));
     }
 

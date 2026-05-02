@@ -15,8 +15,8 @@ enum class EventKind : uint8_t {
     SnapshotReceived,   // a parsed snapshot landed in AppState
     LinkLive,           // BLE / live transitioned false → true
     LinkDead,           // BLE / live transitioned true → false
-    PromptShow,         // PromptUi went visible
-    PromptHide,         // PromptUi went hidden
+    PromptShow,         // PromptUi entered EXPANDED (overlay pushed)
+    PromptHide,         // PromptUi left EXPANDED (overlay popped)
     WifiConnected,      // WifiManager reached STA_CONNECTED
     WifiDisconnected,   // WifiManager left STA_CONNECTED
     SettingsChanged,    // any field on core/Settings persisted
