@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Claude Buddy — WAITING animation demo</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #111;
+    --panel: #1a1a1a;
+    --text: #ddd;
+    --muted: #888;
+    --accent: #5cf;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    min-height: 100vh;
+  }
+  .wrap {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 18px; padding: 32px 16px 64px;
+  }
+  h1 { font-size: 14px; font-weight: 500; color: var(--muted); margin: 0; letter-spacing: 0.04em; }
+  .stage {
+    background: var(--panel);
+    padding: 16px;
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  /* Real TFT is 240x135; scale 3x for visibility. */
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    width: 720px;
+    height: 405px;
+    background: black;
+    border-radius: 4px;
+  }
+  .controls {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    background: var(--panel);
+    padding: 12px 18px;
+    border-radius: 8px;
+  }
+  .controls label { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .controls input[type="checkbox"] { accent-color: var(--accent); }
+  .controls button {
+    background: #222; color: var(--text); border: 1px solid #333;
+    padding: 4px 10px; border-radius: 4px; font: inherit; font-size: 12px;
+    cursor: pointer;
+  }
+  .controls button:hover { background: #2c2c2c; }
+  .legend {
+    font-size: 11px; color: var(--muted); max-width: 720px; line-height: 1.5;
+  }
+  .legend code { color: #aaa; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>CLAUDE BUDDY · WAITING state · 240×135 @ 3×</h1>
+  <div class="stage">
+    <canvas id="screen" width="240" height="135"></canvas>
+  </div>
+  <div class="controls">
+    <label><input type="checkbox" id="t-badge" checked> badge</label>
+    <label><input type="checkbox" id="t-q" checked> question marks</label>
+    <label><input type="checkbox" id="t-scan" checked> gaze scan</label>
+    <label><input type="checkbox" id="t-blink" checked> blinks</label>
+    <label><input type="checkbox" id="t-grid"> pixel grid</label>
+    <button id="reset">reset timers</button>
+  </div>
+  <div class="legend">
+    Mockup of the proposed WAITING animation. Eyes scan between forward gaze and a down-glance toward
+    the badge (above the footer). A cluster of 3 <code>?</code>s drifts upward every ~3.5 s.
+    Badge represents the dismissed/collapsed prompt — center press would re-expand it to the full prompt UI.
+    Footer mirrors the existing <code>LIVE / device-name</code> layout.
+  </div>
+</div>
+
+<script>
+(() => {
+  const cvs = document.getElementById('screen');
+  const ctx = cvs.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const W = 240, H = 135;
+
+  // --- layout constants (mirror EyesCard.cpp) -----------------------------
+  const EYE_W      = 30;
+  const EYE_H_OPEN = 30;
+  const LEFT_X     = 30;        // top-left of left eye
+  const RIGHT_X    = 180;       // top-left of right eye
+  const BLINK_H    = [30, 20, 10, 0, 10, 20, 30];
+  const BLINK_STEP_MS = 70;
+  const BLINK_INTERVAL_MS = 4500;
+
+  // --- WAITING-specific tuning (proposal) --------------------------------
+  const WAIT_BASE_Y    = 22;    // top of eye when neutral; higher than IDLE so glance-down has room
+  const GLANCE_DOWN_DY = 14;    // how far the eye slides down when looking at badge
+  const SCAN_PERIOD_MS = 2000;  // full forward → down → forward cycle
+  const SCAN_HOLD_MS   = 400;   // dwell at the down position
+
+  // Badge geometry
+  const BADGE_H  = 18;
+  const FOOTER_H = 18;
+  const BADGE_MARGIN = 4;
+  const BADGE_Y  = H - FOOTER_H - BADGE_MARGIN - BADGE_H;     // top of badge
+  const BADGE_X  = 8;
+  const BADGE_W  = W - BADGE_X * 2;                           // full-width minus 8px margins
+  const BADGE_CX = BADGE_X + BADGE_W / 2;
+
+  // Question marks
+  const Q_INTERVAL_MS = 3200;
+  const Q_LIFETIME_MS = 3500;
+  const Q_RISE_PX     = 32;
+  const Q_DRIFT_X_PX  = 24;     // total horizontal drift to the right over lifetime
+  const Q_CLUSTER_N   = 5;
+
+  // --- state -------------------------------------------------------------
+  let t0 = performance.now();
+  let blinkI = -1;
+  let blinkStepDeadline = 0;
+  let nextBlinkAt = 800;        // first blink shortly after start
+  const qBubbles = [];          // {bornAt, slotX, slotDy, eye}
+  let nextQAt = 600;
+
+  const opt = {
+    badge: () => document.getElementById('t-badge').checked,
+    q:     () => document.getElementById('t-q').checked,
+    scan:  () => document.getElementById('t-scan').checked,
+    blink: () => document.getElementById('t-blink').checked,
+    grid:  () => document.getElementById('t-grid').checked,
+  };
+
+  document.getElementById('reset').onclick = () => {
+    t0 = performance.now();
+    blinkI = -1; blinkStepDeadline = 0; nextBlinkAt = 800;
+    qBubbles.length = 0; nextQAt = 600;
+  };
+
+  // --- helpers ----------------------------------------------------------
+  function drawPixelGrid() {
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    for (let x = 0; x < W; x += 10) ctx.fillRect(x, 0, 1, H);
+    for (let y = 0; y < H; y += 10) ctx.fillRect(0, y, W, 1);
+  }
+
+  function drawEye(xLeftTop, yTop, h, dx) {
+    if (h <= 0) {
+      // closed lid — thin white line at vertical center
+      const cy = yTop + EYE_H_OPEN / 2;
+      ctx.fillStyle = 'white';
+      ctx.fillRect(xLeftTop + dx, Math.round(cy) - 1, EYE_W, 2);
+      return;
+    }
+    const yCentered = yTop + (EYE_H_OPEN - h) / 2;
+    ctx.fillStyle = 'white';
+    ctx.fillRect(xLeftTop + dx, Math.round(yCentered), EYE_W, h);
+  }
+
+  function drawBadge(litFlash) {
+    // pill outline + label
+    const x = BADGE_X, y = BADGE_Y, w = BADGE_W, h = BADGE_H;
+    ctx.fillStyle = litFlash ? '#fff' : '#222';
+    // body
+    ctx.fillRect(x, y, w, h);
+    // border (1px)
+    ctx.fillStyle = litFlash ? '#fff' : '#999';
+    ctx.fillRect(x, y, w, 1);
+    ctx.fillRect(x, y + h - 1, w, 1);
+    ctx.fillRect(x, y, 1, h);
+    ctx.fillRect(x + w - 1, y, 1, h);
+
+    // small "?" indicator on the left
+    ctx.fillStyle = litFlash ? '#000' : '#fc6';
+    ctx.font = 'bold 10px ui-monospace, monospace';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('?', x + 6, y + h / 2 + 1);
+
+    // label
+    ctx.fillStyle = litFlash ? '#000' : '#ddd';
+    ctx.font = '9px ui-monospace, monospace';
+    ctx.fillText('Bash · approve?', x + 16, y + h / 2 + 1);
+
+    // press hint on the right
+    ctx.fillStyle = litFlash ? '#000' : '#888';
+    ctx.font = '8px ui-monospace, monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('press ●', x + w - 5, y + h / 2 + 1);
+    ctx.textAlign = 'left';
+  }
+
+  function drawFooter() {
+    const y = H - FOOTER_H;
+    const midY = y + FOOTER_H / 2;
+
+    // LIVE pill
+    const pillW = 34, pillH = 12;
+    const pillY = Math.round(midY - pillH / 2);
+    ctx.fillStyle = '#0a0';
+    ctx.fillRect(4, pillY, pillW, pillH);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 9px ui-monospace, monospace';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('LIVE', 8, midY + 1);
+
+    ctx.fillStyle = '#bbb';
+    ctx.font = '9px ui-monospace, monospace';
+    ctx.fillText('Claude-A1B2', 4 + pillW + 6, midY + 1);
+  }
+
+  function drawQuestionMarks(now) {
+    if (!opt.q()) return;
+    ctx.textBaseline = 'alphabetic';
+    for (const b of qBubbles) {
+      const age = now - b.bornAt;
+      if (age < 0) continue;
+      const t = Math.min(1, age / Q_LIFETIME_MS);
+      // ease-out for rise
+      const eased = 1 - Math.pow(1 - t, 2);
+      const y = b.startY - Q_RISE_PX * eased + b.slotDy;
+      const x = b.x + Q_DRIFT_X_PX * eased;
+      const alpha = 1 - t;
+      // per-bubble base size; shrinks ~10% as it rises for a subtle depth cue
+      const size = b.size * (0.9 + 0.1 * (1 - t));
+      ctx.fillStyle = `rgba(255, 220, 120, ${alpha.toFixed(3)})`;
+      ctx.font = `bold ${size.toFixed(1)}px ui-monospace, monospace`;
+      ctx.fillText('?', x, y);
+    }
+  }
+
+  function spawnCluster(now, eyeCx, startY) {
+    // small flock of ?s with offsets, staggered births so they fan out as they rise.
+    // sizes alternate big/small for emphasis — clearly readable as "??".
+    const slotsX  = [-14, -6, 0, 7, 14];
+    const slotsDy = [6, 1, 0, 2, 7];
+    const stagger = [0, 60, 130, 200, 280];
+    const sizes   = [28, 14, 28, 14, 28];   // big / small / big / small / big
+    for (let i = 0; i < Q_CLUSTER_N; i++) {
+      qBubbles.push({
+        bornAt: now + stagger[i],
+        x:      eyeCx + slotsX[i] - sizes[i] / 4,   // rough horizontal centering per glyph
+        startY: startY,
+        slotDy: slotsDy[i],
+        size:   sizes[i],
+      });
+    }
+  }
+
+  function pruneBubbles(now) {
+    for (let i = qBubbles.length - 1; i >= 0; i--) {
+      if (now - qBubbles[i].bornAt > Q_LIFETIME_MS + 100) qBubbles.splice(i, 1);
+    }
+  }
+
+  // gaze: returns dy in pixels added to the eye baseline_y, plus dx (0 here, badge centered)
+  function gaze(now) {
+    if (!opt.scan()) return { dy: 0, dx: 0, looking: 'fwd' };
+    const phase = (now % SCAN_PERIOD_MS) / SCAN_PERIOD_MS; // 0..1
+    // Phases: 0..0.25 ease-down, 0.25..(0.25 + hold) hold-down, then ease-back-up, then hold-fwd
+    const easeMs   = 250;
+    const holdMs   = SCAN_HOLD_MS;
+    const t = now % SCAN_PERIOD_MS;
+    let dy = 0;
+    if (t < easeMs) {
+      const k = t / easeMs;
+      dy = GLANCE_DOWN_DY * easeOutCubic(k);
+    } else if (t < easeMs + holdMs) {
+      dy = GLANCE_DOWN_DY;
+    } else if (t < easeMs + holdMs + easeMs) {
+      const k = (t - easeMs - holdMs) / easeMs;
+      dy = GLANCE_DOWN_DY * (1 - easeOutCubic(k));
+    } else {
+      dy = 0;
+    }
+    const looking = (t > easeMs * 0.5 && t < easeMs + holdMs + easeMs * 0.5) ? 'down' : 'fwd';
+    return { dy, dx: 0, looking };
+  }
+
+  function easeOutCubic(k) { return 1 - Math.pow(1 - k, 3); }
+
+  function tickBlink(now) {
+    if (!opt.blink()) { blinkI = -1; return; }
+    if (blinkI >= 0) {
+      if (now >= blinkStepDeadline) {
+        blinkI++;
+        if (blinkI >= BLINK_H.length) {
+          blinkI = -1;
+          nextBlinkAt = now + BLINK_INTERVAL_MS;
+        } else {
+          blinkStepDeadline = now + BLINK_STEP_MS;
+        }
+      }
+    } else if (now >= nextBlinkAt) {
+      blinkI = 0;
+      blinkStepDeadline = now + BLINK_STEP_MS;
+    }
+  }
+
+  function frame(rafTime) {
+    const now = rafTime - t0;
+
+    // --- update ---
+    tickBlink(now);
+    if (opt.q() && now >= nextQAt) {
+      // anchor cluster between the eyes (face center), rising up past the face
+      const faceCx = W / 2;
+      const startY = WAIT_BASE_Y + EYE_H_OPEN / 2 + 8;
+      spawnCluster(now, faceCx, startY);
+      nextQAt = now + Q_INTERVAL_MS;
+    }
+    pruneBubbles(now);
+
+    const g = gaze(now);
+    const eyeYTop = WAIT_BASE_Y + g.dy;
+    const eyeH = (blinkI >= 0) ? BLINK_H[blinkI] : EYE_H_OPEN;
+    const eyeDx = g.dx;
+
+    // --- draw ---
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 0, W, H);
+
+    if (opt.grid()) drawPixelGrid();
+
+    drawEye(LEFT_X,  eyeYTop, eyeH, eyeDx);
+    drawEye(RIGHT_X, eyeYTop, eyeH, eyeDx);
+
+    drawQuestionMarks(now);
+
+    if (opt.badge()) drawBadge(false);
+    drawFooter();
+
+    requestAnimationFrame(frame);
+  }
+
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
