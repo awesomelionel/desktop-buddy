@@ -138,6 +138,8 @@ void CardController::tick(uint32_t now_ms, Display& display) {
         prompt_card_.setFooter(app_.deviceName(), app_.isLive(now_ms));
     }
 
+    eyes_card_.setFooter(app_.deviceName(), app_.isLive(now_ms));
+
     char outBuf[96];
     if (prompt_ui_take_outgoing(&prompt_, outBuf, sizeof(outBuf))) {
         ble_.writeLine(outBuf);

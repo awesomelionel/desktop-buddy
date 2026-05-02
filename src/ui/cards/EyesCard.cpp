@@ -6,6 +6,7 @@
 #include <math.h>
 
 #include "../../display/Display.h"
+#include "../Footer.h"
 
 namespace {
 
@@ -126,6 +127,8 @@ EyesCard::EyesCard(const AppState& state, const PromptUi& prompt)
     last_wait_gaze_dy_   = 0;
     last_badge_visible_  = false;
     last_q_anim_tick_    = 0;
+    footer_device_[0]    = 0;
+    footer_live_         = false;
 }
 
 void EyesCard::invalidate() {
@@ -166,6 +169,16 @@ void EyesCard::resetAnim() {
     last_q_anim_tick_         = 0;
 }
 
+void EyesCard::setFooter(const char* name, bool live) {
+    if (name) {
+        strncpy(footer_device_, name, sizeof(footer_device_) - 1);
+        footer_device_[sizeof(footer_device_) - 1] = 0;
+    } else {
+        footer_device_[0] = 0;
+    }
+    footer_live_ = live;
+}
+
 void EyesCard::armState(BuddyState state, uint32_t now) {
     prev_state_ = state;
     switch (state) {
@@ -190,8 +203,14 @@ void EyesCard::armState(BuddyState state, uint32_t now) {
             draw_dots_n_                = 0;
             break;
         case STATE_WAITING:
-            blink_i_       = -1;
-            next_blink_ms_ = now + kBlinkIntervalMs;
+            blink_i_                 = -1;
+            next_blink_ms_           = now + kWaitBlinkIntervalMs;
+            blink_step_deadline_ms_  = 0;
+            wait_scan_epoch_ms_      = now;
+            draw_wait_gaze_dy_       = 0;
+            next_q_spawn_ms_         = now + 600;  // first cluster ~0.6 s after entering state
+            for (auto& b : q_bubbles_) b.alive = false;
+            last_q_anim_tick_        = 0;
             break;
     }
 }
@@ -235,6 +254,62 @@ void EyesCard::tickGlanceIdle(uint32_t now) {
         glance_swing_pending_ = true;
         glance_return_ms_     = now + kGlanceHoldMs;
     }
+}
+
+void EyesCard::tickWaitGaze(uint32_t now) {
+    const uint32_t t = (now - wait_scan_epoch_ms_) % kWaitScanPeriodMs;
+    const uint32_t e1 = kWaitScanEaseMs;                            // 250
+    const uint32_t e2 = e1 + kWaitScanHoldDownMs;                   // 650
+    const uint32_t e3 = e2 + kWaitScanEaseMs;                       // 900
+
+    int dy;
+    if (t < e1) {
+        // ease-down (cubic ease-out): k = t/e1, dy = D * (1 - (1-k)^3)
+        float k = (float)t / (float)e1;
+        float eased = 1.0f - (1.0f - k) * (1.0f - k) * (1.0f - k);
+        dy = (int)((float)kWaitGlanceDownDy * eased);
+    } else if (t < e2) {
+        dy = kWaitGlanceDownDy;
+    } else if (t < e3) {
+        float k = (float)(t - e2) / (float)kWaitScanEaseMs;
+        float eased = 1.0f - (1.0f - k) * (1.0f - k) * (1.0f - k);
+        dy = (int)((float)kWaitGlanceDownDy * (1.0f - eased));
+    } else {
+        dy = 0;
+    }
+    draw_wait_gaze_dy_ = (int8_t)dy;
+}
+
+void EyesCard::tickQuestionMarks(uint32_t now) {
+    // Prune dead bubbles
+    for (auto& b : q_bubbles_) {
+        if (b.alive && (now - b.born_ms) > kQLifetimeMs) {
+            b.alive = false;
+        }
+    }
+
+    // Spawn new cluster if due
+    if ((int32_t)(now - next_q_spawn_ms_) >= 0) {
+        for (int i = 0; i < kQClusterN; ++i) {
+            // Find a free slot
+            for (auto& b : q_bubbles_) {
+                if (!b.alive) {
+                    b.alive          = true;
+                    b.born_ms        = now + kQStaggerMs[i];
+                    b.slot_x_offset  = kQSlotsX[i];
+                    b.slot_y_offset  = kQSlotsY[i];
+                    b.size           = kQSizes[i];
+                    break;
+                }
+            }
+        }
+        next_q_spawn_ms_ = now + kQIntervalMs;
+    }
+
+    // Bump the anim tick whenever any bubble is live so isDirty() picks it up.
+    bool any_live = false;
+    for (const auto& b : q_bubbles_) if (b.alive) { any_live = true; break; }
+    if (any_live) last_q_anim_tick_ = now;
 }
 
 void EyesCard::tick(uint32_t now_ms) {
@@ -296,7 +371,18 @@ void EyesCard::tick(uint32_t now_ms) {
 
         case STATE_WAITING:
             tickBlink(now_ms);
-            draw_base_y_ = kBaseWaitY;
+            // Only run the new gaze-scan + question marks while a prompt is
+            // actually live (EXPANDED or COLLAPSED). If WAITING was entered
+            // without a prompt (defensive — currently impossible), fall
+            // back to plain open eyes.
+            if (prompt_.mode != PROMPT_UI_HIDDEN) {
+                tickWaitGaze(now_ms);
+                tickQuestionMarks(now_ms);
+                draw_base_y_ = (int16_t)(kBaseWaitYNew + draw_wait_gaze_dy_);
+            } else {
+                draw_wait_gaze_dy_ = 0;
+                draw_base_y_ = kBaseWaitYNew;
+            }
             draw_dx_     = 0;
             draw_h_      = (blink_i_ >= 0) ? kBlinkH[blink_i_] : 30;
             break;
@@ -305,13 +391,19 @@ void EyesCard::tick(uint32_t now_ms) {
 
 bool EyesCard::isDirty() const {
     if (!frame_valid_) return true;
-    if (last_state_    != state_.buddyState()) return true;
-    if (last_h_        != draw_h_)            return true;
-    if (last_dx_       != draw_dx_)           return true;
-    if (last_base_y_   != draw_base_y_)       return true;
-    if (last_blink_h_  != draw_blink_h_)      return true;
-    if (last_dots_n_   != draw_dots_n_)       return true;
-    if (last_disc_age_ != disc_age_ms_)       return true;
+    if (last_state_      != state_.buddyState()) return true;
+    if (last_h_          != draw_h_)            return true;
+    if (last_dx_         != draw_dx_)           return true;
+    if (last_base_y_     != draw_base_y_)       return true;
+    if (last_blink_h_    != draw_blink_h_)      return true;
+    if (last_dots_n_     != draw_dots_n_)       return true;
+    if (last_disc_age_   != disc_age_ms_)       return true;
+    if (last_wait_gaze_dy_ != draw_wait_gaze_dy_) return true;
+    const bool badge_now = (state_.buddyState() == STATE_WAITING &&
+                            prompt_.mode == PROMPT_UI_COLLAPSED);
+    if (last_badge_visible_ != badge_now) return true;
+    // While bubbles live, force redraw so the rising/drifting ?s animate.
+    for (const auto& b : q_bubbles_) if (b.alive) return true;
     return false;
 }
 
@@ -321,7 +413,7 @@ void EyesCard::render(Display& display) {
     // Per CLAUDE.md: incremental DISCONNECTED frames must use a partial erase
     // to avoid the ~13 ms full-screen flash that causes flicker at 62 fps.
     bool full_clear = stateJustChanged ||
-                      (bs != STATE_DISCONNECTED && bs != STATE_WORKING);
+                      (bs != STATE_DISCONNECTED && bs != STATE_WORKING && bs != STATE_WAITING);
     drawFrame(display.tft(), bs, full_clear);
 
     last_state_    = bs;
@@ -330,6 +422,8 @@ void EyesCard::render(Display& display) {
     last_base_y_   = draw_base_y_;
     last_blink_h_  = draw_blink_h_;
     last_dots_n_   = draw_dots_n_;
+    last_wait_gaze_dy_  = draw_wait_gaze_dy_;
+    last_badge_visible_ = (bs == STATE_WAITING && prompt_.mode == PROMPT_UI_COLLAPSED);
     last_disc_age_ = disc_age_ms_;
     frame_valid_   = true;
 }
@@ -401,6 +495,100 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
         // Typing dots — draw the leftmost draw_dots_n_ of three.
         for (uint8_t i = 0; i < draw_dots_n_; i++) {
             tft.fillCircle(kDotsX[i], kDotsY, kDotR, ST77XX_WHITE);
+        }
+        return;
+    }
+
+    if (state == STATE_WAITING) {
+        const bool prompt_live = (prompt_.mode != PROMPT_UI_HIDDEN);
+        if (!prompt_live) {
+            // Fallback: legacy plain WAITING (no badge, no ?s). Cheap.
+            tft.fillScreen(ST77XX_BLACK);
+            int h = draw_h_;
+            if (h > 0) {
+                int16_t top = (int16_t)(kBaseWaitYNew + 15 - h / 2);
+                tft.fillRect(kLeftX,  top, kEyeW, h, ST77XX_WHITE);
+                tft.fillRect(kRightX, top, kEyeW, h, ST77XX_WHITE);
+            }
+            return;
+        }
+
+        // Per CLAUDE.md: never fillScreen during a continuous animation.
+        // State entry does one full clear; subsequent frames erase only
+        // the (eyes ∪ question-mark) region.
+        if (full_clear) {
+            tft.fillScreen(ST77XX_BLACK);
+        } else {
+            // Union erase rect: eye band y ∈ [22, 66] AND
+            // question-mark band y ∈ [9, 53]. Union: [9, 66] (58 px tall).
+            // Width: full screen for simplicity (~13 920 px erase, still
+            // 4–5 ms cheaper than fillScreen).
+            const int erase_y = 9;
+            const int erase_h = 66 - erase_y + 1;
+            tft.fillRect(0, erase_y, 240, erase_h, ST77XX_BLACK);
+        }
+
+        // 1) Eyes
+        int h = draw_h_;
+        if (h > 0) {
+            int16_t top = (int16_t)(kBaseWaitYNew + draw_wait_gaze_dy_ + 15 - h / 2);
+            tft.fillRect(kLeftX,  top, kEyeW, h, ST77XX_WHITE);
+            tft.fillRect(kRightX, top, kEyeW, h, ST77XX_WHITE);
+        }
+
+        // 2) Question marks (drawn after eyes so they composite on top)
+        const uint32_t now = millis();
+        tft.setTextColor(kQColor, ST77XX_BLACK);
+        for (const auto& b : q_bubbles_) {
+            if (!b.alive) continue;
+            const uint32_t age = now - b.born_ms;
+            if ((int32_t)age < 0) continue;       // staggered, not yet born
+            if (age > kQLifetimeMs) continue;
+            const float t    = (float)age / (float)kQLifetimeMs;
+            const float ease = 1.0f - (1.0f - t) * (1.0f - t);   // quadratic ease-out
+            const int   y    = kQAnchorY - (int)((float)kQRiseY * ease) + b.slot_y_offset;
+            const int   x    = kQAnchorX + b.slot_x_offset + (int)((float)kQDriftX * ease);
+            // GFX text size 1 = 6×8 px; the design wants 14 / 28 px, so
+            // textSize 2 ≈ 14 px and textSize 4 ≈ 28 px.
+            const uint8_t ts = (b.size >= 24) ? 4 : 2;
+            tft.setTextSize(ts);
+            tft.setCursor(x, y - ts * 4);          // baseline-ish nudge
+            tft.print('?');
+        }
+
+        // 3) Badge (only if COLLAPSED — when EXPANDED, the overlay covers
+        // the whole screen so we wouldn't be drawing this branch anyway,
+        // but the check makes the intent explicit).
+        if (prompt_.mode == PROMPT_UI_COLLAPSED) {
+            const bool badge_dirty = full_clear || !last_badge_visible_;
+            if (badge_dirty) {
+                tft.fillRect(0, kBadgeY - 1, 240,
+                             kBadgeH + 2, ST77XX_BLACK);
+                // Border (1-px frame in mid-grey)
+                const uint16_t border = 0x7BEF;
+                tft.drawRect(kBadgeX, kBadgeY, kBadgeW, kBadgeH, border);
+                // Orange ? icon at left
+                tft.setTextSize(1);
+                tft.setTextColor(kQColor, ST77XX_BLACK);
+                tft.setCursor(kBadgeX + 6, kBadgeY + 5);
+                tft.print('?');
+                // Tool · "approve?" label
+                tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+                tft.setCursor(kBadgeX + 16, kBadgeY + 5);
+                tft.print(prompt_.tool[0] ? prompt_.tool : "?");
+                tft.print(" \xB7 approve?");        // 0xB7 ≈ middle dot in CP437
+                // Press hint at right
+                tft.setTextColor(0x7BEF, ST77XX_BLACK);
+                const char* hint = "press \x7";    // 0x07 ≈ small bullet in CP437
+                tft.setCursor(kBadgeX + kBadgeW - 50, kBadgeY + 5);
+                tft.print(hint);
+            }
+        }
+
+        // 4) Footer — drawn on full_clear or when the badge appears.
+        if (full_clear || prompt_.mode == PROMPT_UI_COLLAPSED) {
+            tft.fillRect(0, ui::kFooterTopY, 240, ui::kFooterH, ST77XX_BLACK);
+            ui::drawFooter(tft, footer_device_, footer_live_);
         }
         return;
     }

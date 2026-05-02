@@ -6,6 +6,7 @@
 #include "../../core/AppState.h"
 #include "state.h"
 #include "prompt_ui.h"
+#include <string.h>
 
 class Adafruit_ST7789;
 
@@ -21,11 +22,18 @@ public:
     void render(Display& display) override;
     void tick(uint32_t now_ms) override;
 
+    // CardController feeds device name + liveness every tick so the
+    // collapsed-prompt badge / footer can render without holding an
+    // AppState ref directly. Mirrors PromptCard::setFooter.
+    void setFooter(const char* device_name, bool live);
+
 private:
     void resetAnim();
     void armState(BuddyState s, uint32_t now_ms);
     void tickBlink(uint32_t now_ms);
     void tickGlanceIdle(uint32_t now_ms);
+    void tickWaitGaze(uint32_t now_ms);
+    void tickQuestionMarks(uint32_t now_ms);
     void drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear);
     void drawRotatedSlit(Adafruit_ST7789& tft, int cx, int cy, int h, int sign);
 
@@ -82,4 +90,6 @@ private:
     int8_t     last_wait_gaze_dy_;
     bool       last_badge_visible_;
     uint32_t   last_q_anim_tick_;   // bumped every frame while bubbles are live
+    char       footer_device_[20];
+    bool       footer_live_;
 };
