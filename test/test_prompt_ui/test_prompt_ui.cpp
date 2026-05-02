@@ -23,14 +23,14 @@ static ClaudePrompt make_absent(void) {
 static void test_hidden_until_prompt_present(void) {
     PromptUi ui; prompt_ui_init(&ui);
     prompt_ui_update(&ui, make_absent(), true, 0);
-    TEST_ASSERT_FALSE(prompt_ui_view(&ui).visible);
+    TEST_ASSERT_EQUAL(PROMPT_UI_HIDDEN, prompt_ui_view(&ui).mode);
 }
 
 static void test_shows_with_default_approve(void) {
     PromptUi ui; prompt_ui_init(&ui);
     prompt_ui_update(&ui, make_prompt("r1", "Bash", "ls"), true, 100);
     PromptView v = prompt_ui_view(&ui);
-    TEST_ASSERT_TRUE(v.visible);
+    TEST_ASSERT_EQUAL(PROMPT_UI_EXPANDED, v.mode);
     TEST_ASSERT_EQUAL(OPT_APPROVE, v.highlight);
     TEST_ASSERT_EQUAL_STRING("Bash", v.tool);
     TEST_ASSERT_EQUAL_STRING("ls", v.hint);
@@ -83,18 +83,21 @@ static void test_center_on_dismiss_emits_nothing(void) {
     TEST_ASSERT_FALSE(prompt_ui_take_outgoing(&ui, buf, sizeof(buf)));
 }
 
-static void test_dismiss_is_sticky_per_id(void) {
+static void test_dismiss_collapses_to_badge(void) {
     PromptUi ui; prompt_ui_init(&ui);
     prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 0);
     prompt_ui_button(&ui, BTN_DOWN, 1);
     prompt_ui_button(&ui, BTN_DOWN, 2);
-    prompt_ui_button(&ui, BTN_CENTER, 3);  // dismiss rA
-    // After flash window, UI hides.
+    prompt_ui_button(&ui, BTN_CENTER, 3);  // dismiss rA → COLLAPSED
+    TEST_ASSERT_EQUAL(PROMPT_UI_COLLAPSED, prompt_ui_view(&ui).mode);
+
+    // Same id keeps it COLLAPSED — does not re-expand.
     prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 600);
-    TEST_ASSERT_FALSE(prompt_ui_view(&ui).visible);
-    // New id rB shows again.
-    prompt_ui_update(&ui, make_prompt("rB", "Bash", ""), true, 700);
-    TEST_ASSERT_TRUE(prompt_ui_view(&ui).visible);
+    TEST_ASSERT_EQUAL(PROMPT_UI_COLLAPSED, prompt_ui_view(&ui).mode);
+
+    // Snapshot drops the prompt → fully HIDDEN.
+    prompt_ui_update(&ui, make_absent(), true, 700);
+    TEST_ASSERT_EQUAL(PROMPT_UI_HIDDEN, prompt_ui_view(&ui).mode);
 }
 
 static void test_approve_is_sticky_per_id(void) {
@@ -103,7 +106,7 @@ static void test_approve_is_sticky_per_id(void) {
     prompt_ui_button(&ui, BTN_CENTER, 1);  // approve rA
     // flash expires
     prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 600);
-    TEST_ASSERT_FALSE(prompt_ui_view(&ui).visible);
+    TEST_ASSERT_EQUAL(PROMPT_UI_HIDDEN, prompt_ui_view(&ui).mode);
 }
 
 static void test_deny_is_sticky_per_id(void) {
@@ -112,15 +115,15 @@ static void test_deny_is_sticky_per_id(void) {
     prompt_ui_button(&ui, BTN_DOWN, 1);   // → DENY
     prompt_ui_button(&ui, BTN_CENTER, 2); // deny rA
     prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 600);
-    TEST_ASSERT_FALSE(prompt_ui_view(&ui).visible);
+    TEST_ASSERT_EQUAL(PROMPT_UI_HIDDEN, prompt_ui_view(&ui).mode);
 }
 
 static void test_auto_hide_when_prompt_disappears(void) {
     PromptUi ui; prompt_ui_init(&ui);
     prompt_ui_update(&ui, make_prompt("r1", "Bash", ""), true, 0);
-    TEST_ASSERT_TRUE(prompt_ui_view(&ui).visible);
+    TEST_ASSERT_EQUAL(PROMPT_UI_EXPANDED, prompt_ui_view(&ui).mode);
     prompt_ui_update(&ui, make_absent(), true, 1);
-    TEST_ASSERT_FALSE(prompt_ui_view(&ui).visible);
+    TEST_ASSERT_EQUAL(PROMPT_UI_HIDDEN, prompt_ui_view(&ui).mode);
     char buf[128] = {};
     TEST_ASSERT_FALSE(prompt_ui_take_outgoing(&ui, buf, sizeof(buf)));
 }
@@ -129,7 +132,7 @@ static void test_auto_hide_when_offline(void) {
     PromptUi ui; prompt_ui_init(&ui);
     prompt_ui_update(&ui, make_prompt("r1", "Bash", ""), true, 0);
     prompt_ui_update(&ui, make_prompt("r1", "Bash", ""), false, 1);  // OFFLINE
-    TEST_ASSERT_FALSE(prompt_ui_view(&ui).visible);
+    TEST_ASSERT_EQUAL(PROMPT_UI_HIDDEN, prompt_ui_view(&ui).mode);
 }
 
 static void test_new_id_replaces_visible_prompt(void) {
@@ -138,10 +141,10 @@ static void test_new_id_replaces_visible_prompt(void) {
     prompt_ui_button(&ui, BTN_DOWN, 1);  // highlight = DENY
     TEST_ASSERT_EQUAL(OPT_DENY, prompt_ui_view(&ui).highlight);
     prompt_ui_update(&ui, make_prompt("rB", "Read", "y"), true, 2);
-    PromptView v = prompt_ui_view(&ui);
-    TEST_ASSERT_TRUE(v.visible);
-    TEST_ASSERT_EQUAL(OPT_APPROVE, v.highlight);
-    TEST_ASSERT_EQUAL_STRING("Read", v.tool);
+    PromptView v1 = prompt_ui_view(&ui);
+    TEST_ASSERT_EQUAL(PROMPT_UI_EXPANDED, v1.mode);
+    TEST_ASSERT_EQUAL(OPT_APPROVE, v1.highlight);
+    TEST_ASSERT_EQUAL_STRING("Read", v1.tool);
 }
 
 static void test_flash_clears_after_500ms(void) {
@@ -151,11 +154,11 @@ static void test_flash_clears_after_500ms(void) {
     // At t=499 still visible + flashing.
     prompt_ui_update(&ui, make_prompt("r1", "Bash", ""), true, 499);
     PromptView v1 = prompt_ui_view(&ui);
-    TEST_ASSERT_TRUE(v1.visible);
+    TEST_ASSERT_EQUAL(PROMPT_UI_EXPANDED, v1.mode);
     TEST_ASSERT_NOT_NULL(v1.flash_text);
     // At t=501 hidden.
     prompt_ui_update(&ui, make_prompt("r1", "Bash", ""), true, 501);
-    TEST_ASSERT_FALSE(prompt_ui_view(&ui).visible);
+    TEST_ASSERT_EQUAL(PROMPT_UI_HIDDEN, prompt_ui_view(&ui).mode);
 }
 
 static void test_press_while_hidden_is_noop(void) {
@@ -163,6 +166,81 @@ static void test_press_while_hidden_is_noop(void) {
     prompt_ui_button(&ui, BTN_CENTER, 1);  // no UI to act on
     char buf[128] = {};
     TEST_ASSERT_FALSE(prompt_ui_take_outgoing(&ui, buf, sizeof(buf)));
+}
+
+static void test_dismiss_then_redrop_resends_reexpands(void) {
+    PromptUi ui; prompt_ui_init(&ui);
+    prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 0);
+    prompt_ui_button(&ui, BTN_DOWN, 1);
+    prompt_ui_button(&ui, BTN_DOWN, 2);
+    prompt_ui_button(&ui, BTN_CENTER, 3);  // dismiss → COLLAPSED
+    prompt_ui_update(&ui, make_absent(), true, 4);  // drop → HIDDEN
+    TEST_ASSERT_EQUAL(PROMPT_UI_HIDDEN, prompt_ui_view(&ui).mode);
+    prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 5);
+    TEST_ASSERT_EQUAL(PROMPT_UI_EXPANDED, prompt_ui_view(&ui).mode);
+}
+
+static void test_collapsed_center_reexpands(void) {
+    PromptUi ui; prompt_ui_init(&ui);
+    prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 0);
+    prompt_ui_button(&ui, BTN_DOWN, 1);
+    prompt_ui_button(&ui, BTN_DOWN, 2);
+    prompt_ui_button(&ui, BTN_CENTER, 3);  // dismiss → COLLAPSED
+    TEST_ASSERT_EQUAL(PROMPT_UI_COLLAPSED, prompt_ui_view(&ui).mode);
+
+    prompt_ui_button(&ui, BTN_CENTER, 4);  // re-expand
+    PromptView v = prompt_ui_view(&ui);
+    TEST_ASSERT_EQUAL(PROMPT_UI_EXPANDED, v.mode);
+    TEST_ASSERT_EQUAL(OPT_APPROVE, v.highlight);
+}
+
+static void test_collapsed_up_down_ignored(void) {
+    PromptUi ui; prompt_ui_init(&ui);
+    prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 0);
+    prompt_ui_button(&ui, BTN_DOWN, 1);
+    prompt_ui_button(&ui, BTN_DOWN, 2);
+    prompt_ui_button(&ui, BTN_CENTER, 3);  // dismiss → COLLAPSED
+    prompt_ui_button(&ui, BTN_UP,    4);
+    prompt_ui_button(&ui, BTN_DOWN,  5);
+    TEST_ASSERT_EQUAL(PROMPT_UI_COLLAPSED, prompt_ui_view(&ui).mode);
+}
+
+static void test_new_id_during_collapse_reexpands(void) {
+    PromptUi ui; prompt_ui_init(&ui);
+    prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 0);
+    prompt_ui_button(&ui, BTN_DOWN, 1);
+    prompt_ui_button(&ui, BTN_DOWN, 2);
+    prompt_ui_button(&ui, BTN_CENTER, 3);  // dismiss → COLLAPSED on rA
+    prompt_ui_update(&ui, make_prompt("rB", "Read", "y"), true, 4);
+    PromptView v = prompt_ui_view(&ui);
+    TEST_ASSERT_EQUAL(PROMPT_UI_EXPANDED, v.mode);
+    TEST_ASSERT_EQUAL_STRING("Read", v.tool);
+}
+
+static void test_collapsed_offline_hides(void) {
+    PromptUi ui; prompt_ui_init(&ui);
+    prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 0);
+    prompt_ui_button(&ui, BTN_DOWN, 1);
+    prompt_ui_button(&ui, BTN_DOWN, 2);
+    prompt_ui_button(&ui, BTN_CENTER, 3);  // dismiss → COLLAPSED
+    prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), false, 4);  // OFFLINE
+    TEST_ASSERT_EQUAL(PROMPT_UI_HIDDEN, prompt_ui_view(&ui).mode);
+}
+
+static void test_dismiss_does_not_add_to_decided(void) {
+    PromptUi ui; prompt_ui_init(&ui);
+    prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 0);
+    prompt_ui_button(&ui, BTN_DOWN, 1);
+    prompt_ui_button(&ui, BTN_DOWN, 2);
+    prompt_ui_button(&ui, BTN_CENTER, 3);     // dismiss → COLLAPSED
+    prompt_ui_update(&ui, make_absent(), true, 4);  // drop → HIDDEN
+    prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 5);  // returns
+    TEST_ASSERT_EQUAL(PROMPT_UI_EXPANDED, prompt_ui_view(&ui).mode);
+    prompt_ui_button(&ui, BTN_CENTER, 6);     // approve rA
+    char buf[128] = {};
+    TEST_ASSERT_TRUE(prompt_ui_take_outgoing(&ui, buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_STRING(
+        "{\"cmd\":\"permission\",\"id\":\"rA\",\"decision\":\"once\"}", buf);
 }
 
 int main(int, char**) {
@@ -173,7 +251,13 @@ int main(int, char**) {
     RUN_TEST(test_center_on_approve_emits_once_json);
     RUN_TEST(test_center_on_deny_emits_deny_json);
     RUN_TEST(test_center_on_dismiss_emits_nothing);
-    RUN_TEST(test_dismiss_is_sticky_per_id);
+    RUN_TEST(test_dismiss_collapses_to_badge);
+    RUN_TEST(test_dismiss_then_redrop_resends_reexpands);
+    RUN_TEST(test_collapsed_center_reexpands);
+    RUN_TEST(test_collapsed_up_down_ignored);
+    RUN_TEST(test_new_id_during_collapse_reexpands);
+    RUN_TEST(test_collapsed_offline_hides);
+    RUN_TEST(test_dismiss_does_not_add_to_decided);
     RUN_TEST(test_approve_is_sticky_per_id);
     RUN_TEST(test_deny_is_sticky_per_id);
     RUN_TEST(test_auto_hide_when_prompt_disappears);
