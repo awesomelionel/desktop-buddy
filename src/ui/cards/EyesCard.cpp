@@ -4,6 +4,7 @@
 #include <Adafruit_ST7789.h>
 #include <esp_random.h>
 #include <math.h>
+#include <string.h>
 
 #include "../../display/Display.h"
 #include "../Footer.h"
@@ -126,7 +127,6 @@ EyesCard::EyesCard(const AppState& state, const PromptUi& prompt)
     last_disc_age_ = 0xFFFFFFFFu;
     last_wait_gaze_dy_   = 0;
     last_badge_visible_  = false;
-    last_q_anim_tick_    = 0;
     footer_device_[0]    = 0;
     footer_live_         = false;
 }
@@ -166,7 +166,6 @@ void EyesCard::resetAnim() {
 
     last_wait_gaze_dy_        = 0;
     last_badge_visible_       = false;
-    last_q_anim_tick_         = 0;
 }
 
 void EyesCard::setFooter(const char* name, bool live) {
@@ -185,6 +184,8 @@ void EyesCard::armState(BuddyState state, uint32_t now) {
         case STATE_DISCONNECTED:
             disc_anim_start_ms_ = now;
             disc_age_ms_        = 0;
+            for (auto& b : q_bubbles_) b.alive = false;
+            draw_wait_gaze_dy_   = 0;
             break;
         case STATE_IDLE:
             blink_i_              = -1;
@@ -193,6 +194,8 @@ void EyesCard::armState(BuddyState state, uint32_t now) {
             next_glance_ms_       = now + kGlanceMinMs + (esp_random() % kGlanceJitterMs);
             glance_return_ms_     = 0;
             glance_swing_pending_ = false;
+            for (auto& b : q_bubbles_) b.alive = false;
+            draw_wait_gaze_dy_   = 0;
             break;
         case STATE_WORKING:
             scan_epoch_ms_              = now;
@@ -201,6 +204,8 @@ void EyesCard::armState(BuddyState state, uint32_t now) {
             draw_work_blink_i_          = -1;
             draw_blink_h_               = -1;
             draw_dots_n_                = 0;
+            for (auto& b : q_bubbles_) b.alive = false;
+            draw_wait_gaze_dy_          = 0;
             break;
         case STATE_WAITING:
             blink_i_                 = -1;
@@ -210,7 +215,6 @@ void EyesCard::armState(BuddyState state, uint32_t now) {
             draw_wait_gaze_dy_       = 0;
             next_q_spawn_ms_         = now + 600;  // first cluster ~0.6 s after entering state
             for (auto& b : q_bubbles_) b.alive = false;
-            last_q_anim_tick_        = 0;
             break;
     }
 }
@@ -281,9 +285,14 @@ void EyesCard::tickWaitGaze(uint32_t now) {
 }
 
 void EyesCard::tickQuestionMarks(uint32_t now) {
-    // Prune dead bubbles
+    // Prune dead bubbles. Use a signed cast so staggered bubbles whose
+    // born_ms is still in the future (b.born_ms > now) read as negative
+    // age and survive — without the cast, uint32_t underflow makes their
+    // age look ~4.29 billion, far older than kQLifetimeMs.
     for (auto& b : q_bubbles_) {
-        if (b.alive && (now - b.born_ms) > kQLifetimeMs) {
+        if (!b.alive) continue;
+        const int32_t age = (int32_t)(now - b.born_ms);
+        if (age >= 0 && (uint32_t)age > kQLifetimeMs) {
             b.alive = false;
         }
     }
@@ -305,11 +314,6 @@ void EyesCard::tickQuestionMarks(uint32_t now) {
         }
         next_q_spawn_ms_ = now + kQIntervalMs;
     }
-
-    // Bump the anim tick whenever any bubble is live so isDirty() picks it up.
-    bool any_live = false;
-    for (const auto& b : q_bubbles_) if (b.alive) { any_live = true; break; }
-    if (any_live) last_q_anim_tick_ = now;
 }
 
 void EyesCard::tick(uint32_t now_ms) {
@@ -519,12 +523,14 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
         if (full_clear) {
             tft.fillScreen(ST77XX_BLACK);
         } else {
-            // Union erase rect: eye band y ∈ [22, 66] AND
-            // question-mark band y ∈ [9, 53]. Union: [9, 66] (58 px tall).
-            // Width: full screen for simplicity (~13 920 px erase, still
-            // 4–5 ms cheaper than fillScreen).
-            const int erase_y = 9;
-            const int erase_h = 66 - erase_y + 1;
+            // Erase from screen top down to eye-band bottom. The erase
+            // start was originally y=9 (= kQAnchorY - kQRiseY - 4) but
+            // each `?` glyph is drawn with `setCursor(x, y - ts*4)`, so
+            // size-4 glyphs at the top of their arc paint as far up as
+            // y ≈ -3. Erasing from y=0 covers them at the cost of an
+            // extra 9 rows (~2.2 KB write, ~0.45 ms over SPI).
+            const int erase_y = 0;
+            const int erase_h = 67;     // 0..66 inclusive
             tft.fillRect(0, erase_y, 240, erase_h, ST77XX_BLACK);
         }
 

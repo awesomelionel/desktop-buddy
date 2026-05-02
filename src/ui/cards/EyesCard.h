@@ -6,8 +6,6 @@
 #include "../../core/AppState.h"
 #include "state.h"
 #include "prompt_ui.h"
-#include <string.h>
-
 class Adafruit_ST7789;
 
 // Animated face card. Owns both the animation state and the dirty-tracking
@@ -89,7 +87,6 @@ private:
     uint32_t   last_disc_age_;
     int8_t     last_wait_gaze_dy_;
     bool       last_badge_visible_;
-    uint32_t   last_q_anim_tick_;   // bumped every frame while bubbles are live
     char       footer_device_[20];
     bool       footer_live_;
 };
