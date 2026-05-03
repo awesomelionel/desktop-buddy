@@ -80,9 +80,9 @@ const int      kDotsEraseH          = 7;
 // ---- STATE_WAITING redesign (collapsed-prompt eyes) ----
 const int      kBaseWaitYNew         = 22;     // top of eye when neutral; was 32, raised so down-glance has clearance
 const int      kWaitGlanceDownDy     = 14;     // additional eye-top y when glancing at the badge
-const uint32_t kWaitScanPeriodMs     = 2000;   // full forward → down → forward cycle
-const uint32_t kWaitScanEaseMs       = 250;    // cubic ease in / out duration
-const uint32_t kWaitScanHoldDownMs   = 400;    // dwell at the down position
+const uint32_t kWaitScanPeriodMs     = 3200;   // full forward → down → forward cycle
+const uint32_t kWaitScanEaseMs       = 700;    // cubic ease in / out duration — longer = more in-between frames per px
+const uint32_t kWaitScanHoldDownMs   = 250;    // dwell at the down position
 const uint32_t kWaitBlinkIntervalMs  = 4500;   // identical to IDLE
 const uint32_t kWaitBlinkStepMs      = 70;
 
