@@ -13,12 +13,13 @@ class Adafruit_ST7789;
 // fields — they are the same data viewed from two angles.
 class EyesCard : public Card {
 public:
-    EyesCard(const AppState& state, const PromptUi& prompt);
+    EyesCard(const AppState& state, PromptUi& prompt);
 
     void invalidate() override;
     bool isDirty() const override;
     void render(Display& display) override;
     void tick(uint32_t now_ms) override;
+    bool handleButton(ButtonEvent ev, uint32_t now_ms) override;
 
     // CardController feeds device name + liveness every tick so the
     // collapsed-prompt badge / footer can render without holding an
@@ -36,7 +37,7 @@ private:
     void drawRotatedSlit(Adafruit_ST7789& tft, int cx, int cy, int h, int sign);
 
     const AppState& state_;
-    const PromptUi& prompt_;
+    PromptUi&       prompt_;
 
     // Animation state.
     BuddyState prev_state_;

@@ -114,7 +114,7 @@ const int      kBadgeY       = 135 - 18 - kBadgeBottomGap - kBadgeH;  // 95
 
 }  // namespace
 
-EyesCard::EyesCard(const AppState& state, const PromptUi& prompt)
+EyesCard::EyesCard(const AppState& state, PromptUi& prompt)
     : state_(state), prompt_(prompt) {
     resetAnim();
     frame_valid_   = false;
@@ -176,6 +176,19 @@ void EyesCard::setFooter(const char* name, bool live) {
         footer_device_[0] = 0;
     }
     footer_live_ = live;
+}
+
+bool EyesCard::handleButton(ButtonEvent ev, uint32_t now_ms) {
+    // While a permission prompt is COLLAPSED to the badge, EyesCard is the
+    // active carousel card. Forward button events to the prompt UI so a
+    // CENTER press re-EXPANDs and UP/DOWN do not silently navigate the
+    // carousel. EXPANDED never reaches here because PromptCard takes over
+    // as the overlay; the check is mode != HIDDEN for symmetry.
+    if (prompt_.mode != PROMPT_UI_HIDDEN) {
+        prompt_ui_button(&prompt_, ev, now_ms);
+        return true;
+    }
+    return false;
 }
 
 void EyesCard::armState(BuddyState state, uint32_t now) {
@@ -523,14 +536,16 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
         if (full_clear) {
             tft.fillScreen(ST77XX_BLACK);
         } else {
-            // Erase from screen top down to eye-band bottom. The erase
-            // start was originally y=9 (= kQAnchorY - kQRiseY - 4) but
-            // each `?` glyph is drawn with `setCursor(x, y - ts*4)`, so
-            // size-4 glyphs at the top of their arc paint as far up as
-            // y ≈ -3. Erasing from y=0 covers them at the cost of an
-            // extra 9 rows (~2.2 KB write, ~0.45 ms over SPI).
+            // Erase from screen top down past the worst-case glyph
+            // bottom. Eyes occupy y=22..66 (gaze-down). A size-4 ?-glyph
+            // can be born at slot_y_offset=+7, which puts its bottom row
+            // at y=67 — exactly one pixel below an erase that stopped at
+            // 66, leaving a 1-px ghost trail every frame. Extending the
+            // erase to y=74 (75 rows total) covers the worst-case glyph
+            // plus a few pixels of safety margin while still sitting well
+            // above the badge top at y=95.
             const int erase_y = 0;
-            const int erase_h = 67;     // 0..66 inclusive
+            const int erase_h = 75;     // 0..74 inclusive
             tft.fillRect(0, erase_y, 240, erase_h, ST77XX_BLACK);
         }
 
