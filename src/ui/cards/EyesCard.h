@@ -98,4 +98,11 @@ private:
     // LCD scanline to catch, eliminating the slit tearing the bbox-erase
     // approach used to produce. Allocated lazily on first WORKING entry.
     GFXcanvas16* work_canvas_;
+
+    // Off-screen canvas for the WAITING question-marks band (78×69 px =
+    // 10.5 KB). Same rationale as work_canvas_ — the glyph render goes
+    // through expensive Adafruit_GFX text drawing which writes pixels
+    // one fillRect at a time. Composing in RAM and pushing as one
+    // drawRGBBitmap is both ~5× faster and tearing-free.
+    GFXcanvas16* wait_q_canvas_;
 };

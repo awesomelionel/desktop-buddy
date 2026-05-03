@@ -172,6 +172,7 @@ EyesCard::EyesCard(const AppState& state, PromptUi& prompt)
     footer_device_[0]    = 0;
     footer_live_         = false;
     work_canvas_         = nullptr;
+    wait_q_canvas_       = nullptr;
 }
 
 void EyesCard::invalidate() {
@@ -673,46 +674,67 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
             tft.fillScreen(ST77XX_BLACK);
         }
 
-        // 1) Eyes — erase + redraw only when their geometry changed.
+        // 1) Eyes — differential update against last_*. Pixels in the
+        // (OLD ∩ NEW) overlap are never written, so the LCD scanline
+        // can't catch them mid-transition through black. Same approach
+        // as STATE_IDLE; kept simple because WAITING eyes are axis-
+        // aligned rectangles with draw_dx_ pinned to 0.
         if (eyes_dirty) {
-            if (!full_clear) {
-                tft.fillRect( 29, 21, 32, 47, ST77XX_BLACK);
-                tft.fillRect(179, 21, 32, 47, ST77XX_BLACK);
-            }
-            int h = draw_h_;
-            if (h > 0) {
-                int16_t top = (int16_t)(kBaseWaitYNew + draw_wait_gaze_dy_ + 15 - h / 2);
-                tft.fillRect(kLeftX,  top, kEyeW, h, ST77XX_WHITE);
-                tft.fillRect(kRightX, top, kEyeW, h, ST77XX_WHITE);
+            const int new_top = draw_base_y_ + 15 - draw_h_ / 2;
+            const int old_top = last_base_y_ + 15 - last_h_  / 2;
+            if (full_clear) {
+                if (draw_h_ > 0) {
+                    tft.fillRect(kLeftX,  new_top, kEyeW, draw_h_, ST77XX_WHITE);
+                    tft.fillRect(kRightX, new_top, kEyeW, draw_h_, ST77XX_WHITE);
+                }
+            } else {
+                drawRectsAMinusB(tft, kLeftX,  old_top, kEyeW, last_h_,
+                                      kLeftX,  new_top, kEyeW, draw_h_, ST77XX_BLACK);
+                drawRectsAMinusB(tft, kLeftX,  new_top, kEyeW, draw_h_,
+                                      kLeftX,  old_top, kEyeW, last_h_, ST77XX_WHITE);
+                drawRectsAMinusB(tft, kRightX, old_top, kEyeW, last_h_,
+                                      kRightX, new_top, kEyeW, draw_h_, ST77XX_BLACK);
+                drawRectsAMinusB(tft, kRightX, new_top, kEyeW, draw_h_,
+                                      kRightX, old_top, kEyeW, last_h_, ST77XX_WHITE);
             }
         }
 
-        // 2) Question marks — erase + redraw the centre band any frame
-        // a bubble is live. The glyphs are drawn via GFX text rendering
-        // which is the most expensive call in this state (~2 ms per
-        // size-4 glyph), so this branch dominates the per-frame cost.
+        // 2) Question marks — back-buffer through GFXcanvas16 (78 × 69
+        // = 10.5 KB) and push as one drawRGBBitmap SPI burst. The
+        // previous direct-to-TFT path went through Adafruit_GFX text
+        // rendering, ~2 ms per size-4 glyph × 5 glyphs = ~10 ms per
+        // frame, with a separate bbox erase that briefly blacked the
+        // region — both expensive and tearing-prone. Composing in RAM
+        // first lets the LCD pixels go OLD → NEW directly with a
+        // single continuous SPI sweep.
         if (q_dirty) {
-            if (!full_clear) {
-                tft.fillRect(100, 0, 78, 69, ST77XX_BLACK);
+            if (!wait_q_canvas_) {
+                wait_q_canvas_ = new GFXcanvas16(78, 69);
             }
+            wait_q_canvas_->fillScreen(ST77XX_BLACK);
+            wait_q_canvas_->setTextColor(kQColor, ST77XX_BLACK);
             const uint32_t now = millis();
-            tft.setTextColor(kQColor, ST77XX_BLACK);
+            // Canvas origin on screen is (100, 0); convert each glyph
+            // position to canvas-local coords by subtracting 100/0.
+            const int kCanvasOriginX = 100;
+            const int kCanvasOriginY = 0;
             for (const auto& b : q_bubbles_) {
                 if (!b.alive) continue;
                 const uint32_t age = now - b.born_ms;
-                if ((int32_t)age < 0) continue;     // staggered, not yet born
+                if ((int32_t)age < 0) continue;
                 if (age > kQLifetimeMs) continue;
                 const float t    = (float)age / (float)kQLifetimeMs;
-                const float ease = 1.0f - (1.0f - t) * (1.0f - t);   // quadratic ease-out
-                const int   y    = kQAnchorY - (int)((float)kQRiseY * ease) + b.slot_y_offset;
-                const int   x    = kQAnchorX + b.slot_x_offset + (int)((float)kQDriftX * ease);
-                // GFX text size 1 = 6×8 px; the design wants 14 / 28 px, so
-                // textSize 2 ≈ 14 px and textSize 4 ≈ 28 px.
+                const float ease = 1.0f - (1.0f - t) * (1.0f - t);
+                const int   gy   = kQAnchorY - (int)((float)kQRiseY * ease) + b.slot_y_offset;
+                const int   gx   = kQAnchorX + b.slot_x_offset + (int)((float)kQDriftX * ease);
                 const uint8_t ts = (b.size >= 24) ? 4 : 2;
-                tft.setTextSize(ts);
-                tft.setCursor(x, y - ts * 4);          // baseline-ish nudge
-                tft.print('?');
+                wait_q_canvas_->setTextSize(ts);
+                wait_q_canvas_->setCursor(gx - kCanvasOriginX,
+                                          gy - kCanvasOriginY - ts * 4);
+                wait_q_canvas_->print('?');
             }
+            tft.drawRGBBitmap(kCanvasOriginX, kCanvasOriginY,
+                              wait_q_canvas_->getBuffer(), 78, 69);
         }
 
         // 3) Badge (only if COLLAPSED — when EXPANDED, the overlay covers
