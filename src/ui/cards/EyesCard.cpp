@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Adafruit_ST7789.h>
+#include <Adafruit_GFX.h>     // GFXcanvas16 for tearing-free WORKING eyes
 #include <esp_random.h>
 #include <math.h>
 #include <string.h>
@@ -170,6 +171,7 @@ EyesCard::EyesCard(const AppState& state, PromptUi& prompt)
     last_badge_visible_  = false;
     footer_device_[0]    = 0;
     footer_live_         = false;
+    work_canvas_         = nullptr;
 }
 
 void EyesCard::invalidate() {
@@ -566,28 +568,55 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
     }
 
     if (state == STATE_WORKING) {
-        // Per-frame partial erase — see CLAUDE.md "never fillScreen in continuous animations."
-        // State entry does one fillScreen; steady frames erase only the dirty rects.
-        if (full_clear) {
-            tft.fillScreen(ST77XX_BLACK);
-        } else {
-            tft.fillRect(kWorkLeftCx  - kWorkEraseW / 2,
-                         kWorkEyeCy   - kWorkEraseH / 2,
-                         kWorkEraseW, kWorkEraseH, ST77XX_BLACK);
-            tft.fillRect(kWorkRightCx - kWorkEraseW / 2,
-                         kWorkEyeCy   - kWorkEraseH / 2,
-                         kWorkEraseW, kWorkEraseH, ST77XX_BLACK);
-            tft.fillRect(kDotsEraseX, kDotsEraseY,
-                         kDotsEraseW, kDotsEraseH, ST77XX_BLACK);
+        // Tearing-free render: each eye is composed off-screen in a
+        // 54×21 GFXcanvas16, then pushed to the LCD as one continuous
+        // SPI burst via drawRGBBitmap. The rotated-slit shape changes
+        // every frame (h breathes, dx drifts), so the previous bbox-
+        // erase-then-fillTriangle approach briefly blacked out the
+        // slit each frame and the LCD scanline could catch a
+        // half-finished frame. Composing in RAM means the LCD pixels
+        // go directly OLD → NEW without any black intermediate.
+        //
+        // Canvas allocated lazily so non-WORKING sessions pay nothing.
+        if (!work_canvas_) {
+            work_canvas_ = new GFXcanvas16(kWorkEraseW, kWorkEraseH);
         }
 
-        // Furrowed slit eyes — left eye +15°, right eye -15°.
-        drawRotatedSlit(tft, kWorkLeftCx  + draw_dx_, kWorkEyeCy, draw_h_, +1);
-        drawRotatedSlit(tft, kWorkRightCx + draw_dx_, kWorkEyeCy, draw_h_, -1);
+        if (full_clear) {
+            tft.fillScreen(ST77XX_BLACK);
+        }
 
-        // Typing dots — draw the leftmost draw_dots_n_ of three.
-        for (uint8_t i = 0; i < draw_dots_n_; i++) {
-            tft.fillCircle(kDotsX[i], kDotsY, kDotR, ST77XX_WHITE);
+        const int origin_y = kWorkEyeCy - kWorkEraseH / 2;
+        const int local_cy = kWorkEraseH / 2;
+
+        // LEFT eye
+        work_canvas_->fillScreen(ST77XX_BLACK);
+        const int left_origin_x = kWorkLeftCx - kWorkEraseW / 2;
+        const int local_cx_l    = (kWorkLeftCx + draw_dx_) - left_origin_x;
+        drawRotatedSlit(*work_canvas_, local_cx_l, local_cy, draw_h_, +1);
+        tft.drawRGBBitmap(left_origin_x, origin_y,
+                          work_canvas_->getBuffer(),
+                          kWorkEraseW, kWorkEraseH);
+
+        // RIGHT eye
+        work_canvas_->fillScreen(ST77XX_BLACK);
+        const int right_origin_x = kWorkRightCx - kWorkEraseW / 2;
+        const int local_cx_r     = (kWorkRightCx + draw_dx_) - right_origin_x;
+        drawRotatedSlit(*work_canvas_, local_cx_r, local_cy, draw_h_, -1);
+        tft.drawRGBBitmap(right_origin_x, origin_y,
+                          work_canvas_->getBuffer(),
+                          kWorkEraseW, kWorkEraseH);
+
+        // Typing dots — only redraw when the count changes (cheap small
+        // circles). Erase rect covers all 3 positions.
+        if (full_clear || draw_dots_n_ != last_dots_n_) {
+            if (!full_clear) {
+                tft.fillRect(kDotsEraseX, kDotsEraseY,
+                             kDotsEraseW, kDotsEraseH, ST77XX_BLACK);
+            }
+            for (uint8_t i = 0; i < draw_dots_n_; i++) {
+                tft.fillCircle(kDotsX[i], kDotsY, kDotR, ST77XX_WHITE);
+            }
         }
         return;
     }
@@ -776,7 +805,7 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
     tft.fillRect(kRightX + draw_dx_, top, kEyeW, h, ST77XX_WHITE);
 }
 
-void EyesCard::drawRotatedSlit(Adafruit_ST7789& tft, int cx, int cy, int h, int sign) {
+void EyesCard::drawRotatedSlit(Adafruit_GFX& gfx, int cx, int cy, int h, int sign) {
     if (h <= 0) return;
 
     // Width-axis basis (constant; width = kEyeW). For sign = -1, negate the y component.
@@ -801,6 +830,8 @@ void EyesCard::drawRotatedSlit(Adafruit_ST7789& tft, int cx, int cy, int h, int 
     const int16_t bly = (int16_t)lroundf(cy - uy - vy);
 
     // Two triangles split the parallelogram along the TL→BR diagonal.
-    tft.fillTriangle(tlx, tly, trx, try_, brx, bry, ST77XX_WHITE);
-    tft.fillTriangle(tlx, tly, brx, bry, blx, bly, ST77XX_WHITE);
+    // Adafruit_GFX::fillTriangle is virtual, so this dispatches to either
+    // the TFT driver or a GFXcanvas16 depending on the caller.
+    gfx.fillTriangle(tlx, tly, trx, try_, brx, bry, ST77XX_WHITE);
+    gfx.fillTriangle(tlx, tly, brx, bry, blx, bly, ST77XX_WHITE);
 }

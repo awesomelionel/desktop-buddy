@@ -7,6 +7,8 @@
 #include "state.h"
 #include "prompt_ui.h"
 class Adafruit_ST7789;
+class Adafruit_GFX;
+class GFXcanvas16;
 
 // Animated face card. Owns both the animation state and the dirty-tracking
 // state previously split between src/eyes.{h,cpp} and EyesCard's mirror
@@ -34,7 +36,7 @@ private:
     void tickWaitGaze(uint32_t now_ms);
     void tickQuestionMarks(uint32_t now_ms);
     void drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear);
-    void drawRotatedSlit(Adafruit_ST7789& tft, int cx, int cy, int h, int sign);
+    void drawRotatedSlit(Adafruit_GFX& gfx, int cx, int cy, int h, int sign);
 
     const AppState& state_;
     PromptUi&       prompt_;
@@ -89,4 +91,11 @@ private:
     bool       last_badge_visible_;
     char       footer_device_[20];
     bool       footer_live_;
+
+    // Off-screen canvas for the WORKING eye render. Each eye is composed
+    // here in RAM (54×21 px = 2.3 KB) then pushed to the LCD as one
+    // continuous SPI burst — no black-flash intermediate state for the
+    // LCD scanline to catch, eliminating the slit tearing the bbox-erase
+    // approach used to produce. Allocated lazily on first WORKING entry.
+    GFXcanvas16* work_canvas_;
 };
