@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "../../display/Display.h"
+#include "../Footer.h"
 
 StatusCard::StatusCard(const AppState& state)
     : state_(state),
@@ -65,11 +66,7 @@ void StatusCard::render(Display& display) {
         }
     }
 
-    tft.setTextColor(live ? ST77XX_GREEN : ST77XX_RED, ST77XX_BLACK);
-    tft.setCursor(8, 118);
-    tft.print(live ? "LIVE  " : "OFFLN ");
-    tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-    tft.print(state_.deviceName());
+    ui::drawFooter(tft, state_.deviceName(), live);
 
     last_drawn_state_ = bs;
     strncpy(last_drawn_msg_, status.msg, sizeof(last_drawn_msg_) - 1);

@@ -2,9 +2,6 @@
 #include <string.h>
 #include <stdio.h>
 
-// RGB565 — same encoding the rest of the firmware uses (Adafruit GFX
-// ST77XX colors). Defined here as plain constants so the library
-// compiles host-side without pulling Adafruit_GFX in.
 static const uint16_t COLOR_GREEN  = 0x07E0;
 static const uint16_t COLOR_RED    = 0xF800;
 static const uint16_t COLOR_YELLOW = 0xFFE0;
@@ -12,7 +9,7 @@ static const uint16_t COLOR_YELLOW = 0xFFE0;
 static const uint32_t FLASH_MS = 500;
 
 static void hide(PromptUi* ui) {
-    ui->visible          = false;
+    ui->mode             = PROMPT_UI_HIDDEN;
     ui->flashing         = false;
     ui->flash_text[0]    = 0;
     ui->flash_start_ms   = 0;
@@ -21,7 +18,11 @@ static void hide(PromptUi* ui) {
 }
 
 static void show(PromptUi* ui, const ClaudePrompt& p) {
-    ui->visible = true;
+    // New prompts arrive COLLAPSED so the animated face stays on screen
+    // and the user opts into the Approve/Deny/Dismiss UI with a center
+    // press on the badge. Approve/Deny still flash + hide and remain
+    // sticky via last_decided_id.
+    ui->mode = PROMPT_UI_COLLAPSED;
     strncpy(ui->current_id, p.id,   sizeof(ui->current_id) - 1);
     ui->current_id[sizeof(ui->current_id) - 1] = 0;
     strncpy(ui->tool,       p.tool, sizeof(ui->tool) - 1);
@@ -34,44 +35,59 @@ static void show(PromptUi* ui, const ClaudePrompt& p) {
     ui->flash_start_ms = 0;
 }
 
+static void collapse(PromptUi* ui) {
+    ui->mode           = PROMPT_UI_COLLAPSED;
+    ui->flashing       = false;
+    ui->flash_text[0]  = 0;
+    ui->flash_start_ms = 0;
+    // current_id, tool, hint, highlight all preserved so re-EXPAND
+    // restores the same prompt context.
+}
+
 void prompt_ui_init(PromptUi* ui) {
     memset(ui, 0, sizeof(*ui));
+    ui->mode = PROMPT_UI_HIDDEN;
 }
 
 void prompt_ui_update(PromptUi* ui, const ClaudePrompt& p,
                       bool live, uint32_t now_ms) {
-    // Fire flash → hide first so the rest of the function operates on
-    // post-flash state.
-    if (ui->visible && ui->flashing &&
+    // Fire flash → hide first (only Approve/Deny set flashing now;
+    // Dismiss collapses synchronously without a flash).
+    if (ui->mode == PROMPT_UI_EXPANDED && ui->flashing &&
         (uint32_t)(now_ms - ui->flash_start_ms) >= FLASH_MS) {
         hide(ui);
     }
 
     if (!live) {
-        if (ui->visible) hide(ui);
+        if (ui->mode != PROMPT_UI_HIDDEN) hide(ui);
         return;
     }
 
     if (!p.present) {
-        if (ui->visible) hide(ui);
+        if (ui->mode != PROMPT_UI_HIDDEN) hide(ui);
         return;
     }
 
     // p.present && live
-    // While flashing (within the flash window), let the flash run its course
-    // even if the prompt id is in the dismissed set. The dismissed-id check
-    // only suppresses re-showing after the flash hides the UI.
+    // While flashing (within the flash window), let the flash run its
+    // course even if the prompt id is in the dismissed set. The
+    // dismissed-id check only suppresses re-showing after the flash
+    // hides the UI.
     if (!ui->flashing && strcmp(p.id, ui->last_decided_id) == 0) {
-        // Same id was previously decided (approve/deny/dismiss) and flash has
-        // already expired. Stay (or become) hidden.
-        if (ui->visible) hide(ui);
+        // Same id was previously DECIDED (Approve or Deny). Stay (or
+        // become) hidden. Note: Dismiss no longer writes
+        // last_decided_id, so a Dismiss → drop → re-send cycle will
+        // re-EXPAND on the next update.
+        if (ui->mode != PROMPT_UI_HIDDEN) hide(ui);
         return;
     }
 
-    if (ui->visible && strcmp(p.id, ui->current_id) == 0) {
-        return;  // same prompt, no change
+    if (ui->mode != PROMPT_UI_HIDDEN &&
+        strcmp(p.id, ui->current_id) == 0) {
+        return;  // same prompt, no change (preserves COLLAPSED)
     }
 
+    // Either a new id arrived, or we were HIDDEN. EXPAND.
     show(ui, p);
 }
 
@@ -92,7 +108,19 @@ static void start_flash(PromptUi* ui, const char* text, uint16_t color,
 }
 
 void prompt_ui_button(PromptUi* ui, ButtonEvent ev, uint32_t now_ms) {
-    if (!ui->visible || ui->flashing) return;
+    if (ui->mode == PROMPT_UI_HIDDEN) return;
+
+    if (ui->mode == PROMPT_UI_COLLAPSED) {
+        // Only CENTER re-expands; UP/DOWN ignored.
+        if (ev == BTN_CENTER) {
+            ui->mode      = PROMPT_UI_EXPANDED;
+            ui->highlight = OPT_APPROVE;
+        }
+        return;
+    }
+
+    // EXPANDED
+    if (ui->flashing) return;
 
     switch (ev) {
         case BTN_UP:
@@ -120,10 +148,9 @@ void prompt_ui_button(PromptUi* ui, ButtonEvent ev, uint32_t now_ms) {
                     start_flash(ui, "SENT: DENY", COLOR_RED, now_ms);
                     return;
                 case OPT_DISMISS:
-                    strncpy(ui->last_decided_id, ui->current_id,
-                            sizeof(ui->last_decided_id) - 1);
-                    ui->last_decided_id[sizeof(ui->last_decided_id) - 1] = 0;
-                    start_flash(ui, "DISMISSED", COLOR_YELLOW, now_ms);
+                    // No flash, no last_decided_id write — Dismiss now
+                    // collapses to badge so the user can re-engage later.
+                    collapse(ui);
                     return;
             }
             return;
@@ -135,7 +162,7 @@ void prompt_ui_button(PromptUi* ui, ButtonEvent ev, uint32_t now_ms) {
 
 PromptView prompt_ui_view(const PromptUi* ui) {
     PromptView v = {};
-    v.visible     = ui->visible;
+    v.mode        = ui->mode;
     v.tool        = ui->tool;
     v.hint        = ui->hint;
     v.highlight   = ui->highlight;

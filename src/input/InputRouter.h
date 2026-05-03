@@ -11,7 +11,7 @@
 // reads the buttons, dispatches to CardStack, and falls through to carousel
 // nav. While the prompt still lives outside the stack, callers can split:
 //   ButtonEvent ev = router.update(now);
-//   if (prompt.visible) prompt_ui_button(...);
+//   if (prompt.mode != PROMPT_UI_HIDDEN) prompt_ui_button(...);
 //   else                router.dispatch(ev, now);
 class InputRouter {
 public:

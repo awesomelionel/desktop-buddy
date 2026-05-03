@@ -4,11 +4,12 @@
 #include <string.h>
 
 #include "../../display/Display.h"
+#include "../Footer.h"
 
 PromptCard::PromptCard(PromptUi& ui)
     : ui_(ui),
       ever_drawn_(false),
-      last_visible_(false),
+      last_expanded_(false),
       last_highlight_(OPT_APPROVE),
       last_id_{0},
       last_flashing_(false),
@@ -24,7 +25,7 @@ void PromptCard::invalidate() {
 bool PromptCard::isDirty() const {
     if (!ever_drawn_) return true;
     PromptView pv = prompt_ui_view(&ui_);
-    if (pv.visible != last_visible_) return true;
+    if ((pv.mode == PROMPT_UI_EXPANDED) != last_expanded_) return true;
     if (pv.highlight != last_highlight_) return true;
     if ((pv.flash_text != nullptr) != last_flashing_) return true;
     if (strncmp(last_id_, ui_.current_id, sizeof(last_id_)) != 0) return true;
@@ -97,15 +98,10 @@ void PromptCard::render(Display& display) {
     }
 
     if (has_footer_) {
-        tft.setTextSize(1);
-        tft.setTextColor(footer_live_ ? ST77XX_GREEN : ST77XX_RED, ST77XX_BLACK);
-        tft.setCursor(8, 118);
-        tft.print(footer_live_ ? "LIVE  " : "OFFLN ");
-        tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-        tft.print(footer_device_);
+        ui::drawFooter(tft, footer_device_, footer_live_);
     }
 
-    last_visible_  = v.visible;
+    last_expanded_  = (v.mode == PROMPT_UI_EXPANDED);
     last_highlight_ = v.highlight;
     last_flashing_ = (v.flash_text != nullptr);
     strncpy(last_id_, ui_.current_id, sizeof(last_id_) - 1);
