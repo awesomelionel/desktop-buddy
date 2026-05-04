@@ -9,6 +9,7 @@
 
 #include "../../display/Display.h"
 #include "../Footer.h"
+#include "../PromptBadge.h"
 
 namespace {
 
@@ -742,30 +743,15 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
 
         // 3) Badge (only if COLLAPSED — when EXPANDED, the overlay covers
         // the whole screen so we wouldn't be drawing this branch anyway,
-        // but the check makes the intent explicit).
+        // but the check makes the intent explicit). Geometry + glyph
+        // layout live in ui::drawPromptBadge so StatusCard renders the
+        // exact same widget on the main page.
         if (prompt_.mode == PROMPT_UI_COLLAPSED) {
             const bool badge_dirty = full_clear || !last_badge_visible_;
             if (badge_dirty) {
-                tft.fillRect(0, kBadgeY - 1, 240,
-                             kBadgeH + 2, ST77XX_BLACK);
-                // Border (1-px frame in mid-grey)
-                const uint16_t border = 0x7BEF;
-                tft.drawRect(kBadgeX, kBadgeY, kBadgeW, kBadgeH, border);
-                // Orange ? icon at left
-                tft.setTextSize(1);
-                tft.setTextColor(kQColor, ST77XX_BLACK);
-                tft.setCursor(kBadgeX + 6, kBadgeY + 5);
-                tft.print('?');
-                // Tool · "approve?" label
-                tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-                tft.setCursor(kBadgeX + 16, kBadgeY + 5);
-                tft.print(prompt_.tool[0] ? prompt_.tool : "?");
-                tft.print(" \xB7 approve?");        // 0xB7 ≈ middle dot in CP437
-                // Press hint at right
-                tft.setTextColor(0x7BEF, ST77XX_BLACK);
-                const char* hint = "press \x7";    // 0x07 ≈ small bullet in CP437
-                tft.setCursor(kBadgeX + kBadgeW - 50, kBadgeY + 5);
-                tft.print(hint);
+                tft.fillRect(0, ui::kPromptBadgeEraseY, 240,
+                             ui::kPromptBadgeEraseH, ST77XX_BLACK);
+                ui::drawPromptBadge(tft, prompt_.tool);
             }
         }
 

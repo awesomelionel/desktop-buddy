@@ -7,6 +7,15 @@
 
 class Settings;
 
+// Cached battery snapshot. Populated by BatteryMonitor's tick() in
+// main.cpp and read by StatusCard. percent == 0xFF means "not yet
+// sampled" / no fuel gauge present, in which case the widget hides.
+struct BatteryStatus {
+    uint8_t percent  = 0xFF;
+    bool    charging = false;
+    bool    present  = false;
+};
+
 // Owns the snapshot-derived state: latest ClaudeStatus, derived BuddyState,
 // time of last received snapshot, and the BLE device name. Render code reads
 // it via const reference; the input/networking layer mutates via setters.
@@ -36,6 +45,7 @@ public:
     const ClaudeStatus& status()     const { return status_; }
     BuddyState          buddyState() const { return buddy_state_; }
     uint32_t            lastSnapshotMs() const { return last_snapshot_ms_; }
+    const BatteryStatus& battery()   const { return battery_; }
 
     bool isLive(uint32_t now_ms) const;
 
@@ -43,11 +53,13 @@ public:
     ClaudeStatus& mutableStatus() { return status_; }
     void          markSnapshot(uint32_t now_ms) { last_snapshot_ms_ = now_ms; }
     void          setBuddyState(BuddyState s) { buddy_state_ = s; }
+    void          setBattery(const BatteryStatus& b) { battery_ = b; }
 
 private:
     char            mac_device_name_[16];
     ClaudeStatus    status_;
     BuddyState      buddy_state_;
     uint32_t        last_snapshot_ms_;
+    BatteryStatus   battery_;
     const Settings* settings_ = nullptr;
 };

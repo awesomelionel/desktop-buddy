@@ -12,7 +12,7 @@ CardController::CardController(AppState& app, EventBus& bus, WifiManager& wifi,
                                int pin_btn_prev, uint8_t btn_prev_pressed_level)
     : app_(app), bus_(bus), wifi_(wifi), prompt_(prompt), ble_(ble),
       settings_(settings),
-      status_card_(app),
+      status_card_(app, prompt),
       eyes_card_(app, prompt),
       wifi_card_(wifi),
       nav_card_(pin_btn_next, btn_next_pressed_level,
@@ -29,8 +29,13 @@ CardController::CardController(AppState& app, EventBus& bus, WifiManager& wifi,
 void CardController::begin() {
     rebuildStack();
 
-    bus_.subscribe(EventKind::SnapshotReceived,
-                   [this] { status_card_.invalidate(); });
+    // Snapshots no longer invalidate StatusCard: invalidate() forces a
+    // full fillScreen on the next render (it's used by card switches +
+    // sleep-wake where pixels are stale), and BLE snapshots arrive often
+    // enough that this strobed the whole card every second. StatusCard's
+    // per-region dirty checks already pick up changes to total / running
+    // / waiting / tokens_today / msg / valid / live without needing
+    // invalidate().
     bus_.subscribe(EventKind::WifiConnected,
                    [this] { wifi_card_.invalidate(); });
     bus_.subscribe(EventKind::WifiDisconnected,

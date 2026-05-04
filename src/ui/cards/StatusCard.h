@@ -5,16 +5,18 @@
 
 #include "../Card.h"
 #include "../../core/AppState.h"
+#include "prompt_ui.h"
 #include "protocol.h"
 #include "state.h"
 
 class StatusCard : public Card {
 public:
-    explicit StatusCard(const AppState& state);
+    StatusCard(const AppState& state, PromptUi& prompt);
 
     void invalidate() override;
     bool isDirty() const override;
     void render(Display& display) override;
+    bool handleButton(ButtonEvent ev, uint32_t now_ms) override;
 
     // The status card needs a periodic recheck so live → offline transitions
     // repaint even if the snapshot stops arriving.
@@ -22,6 +24,7 @@ public:
 
 private:
     const AppState& state_;
+    PromptUi&       prompt_;
     bool            ever_drawn_;
     BuddyState      last_drawn_state_;
     // Per-region snapshots so render() can repaint only the strips that
@@ -36,4 +39,21 @@ private:
     bool            last_drawn_live_;
     uint32_t        last_recheck_ms_;
     uint32_t        last_drawn_tokens_today_;
+    // Tracks whether the prompt badge was on screen on the previous
+    // render so we know to wipe the msg block area when COLLAPSED
+    // turns off, and tracks the tool string so the badge re-renders
+    // when a new prompt arrives.
+    bool            last_drawn_prompt_collapsed_;
+    char            last_drawn_prompt_tool_[16];
+    // Battery snapshot — updated when the cached BatteryStatus
+    // changes or the charging animation steps. anim_step_ cycles
+    // 0..3 every kChargeAnimMs while charging; outside of charging
+    // we leave it at 0 so the discharge render path is fully
+    // determined by percent_.
+    uint8_t         last_drawn_battery_pct_;
+    bool            last_drawn_battery_charging_;
+    bool            last_drawn_battery_present_;
+    uint8_t         last_drawn_anim_step_;
+    uint8_t         anim_step_;
+    uint32_t        last_anim_step_ms_;
 };

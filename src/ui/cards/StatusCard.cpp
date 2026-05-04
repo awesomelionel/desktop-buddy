@@ -3,11 +3,21 @@
 #include <Arduino.h>
 
 #include "../../display/Display.h"
+#include "../BatteryWidget.h"
 #include "../Footer.h"
+#include "../PromptBadge.h"
 #include "format.h"
 
-StatusCard::StatusCard(const AppState& state)
+namespace {
+// Charging animation pacing. Bars sweep 1 → 4 → 1 → 4 … at this
+// rate. Slow enough that it doesn't feel jittery on the small
+// 4-bar icon, fast enough that it reads as motion.
+constexpr uint32_t kChargeAnimMs = 600;
+}  // namespace
+
+StatusCard::StatusCard(const AppState& state, PromptUi& prompt)
     : state_(state),
+      prompt_(prompt),
       ever_drawn_(false),
       last_drawn_state_(STATE_DISCONNECTED),
       last_drawn_total_(0xFF),       // sentinel: no real count == 0xFF
@@ -17,7 +27,27 @@ StatusCard::StatusCard(const AppState& state)
       last_drawn_msg_{0},
       last_drawn_live_(false),
       last_recheck_ms_(0),
-      last_drawn_tokens_today_(0xFFFFFFFFu) {}
+      last_drawn_tokens_today_(0xFFFFFFFFu),
+      last_drawn_battery_pct_(0xFE),       // sentinel != 0xFF (unsampled)
+      last_drawn_battery_charging_(false),
+      last_drawn_battery_present_(false),
+      last_drawn_anim_step_(0xFF),
+      anim_step_(0),
+      last_anim_step_ms_(0),
+      last_drawn_prompt_collapsed_(false),
+      last_drawn_prompt_tool_{0} {}
+
+bool StatusCard::handleButton(ButtonEvent ev, uint32_t now_ms) {
+    // While a permission prompt is COLLAPSED to the badge, StatusCard
+    // is the active carousel card. Forward button events to the
+    // prompt UI so a CENTER press re-EXPANDs and UP/DOWN don't
+    // silently navigate the carousel — same contract as EyesCard.
+    if (prompt_.mode != PROMPT_UI_HIDDEN) {
+        prompt_ui_button(&prompt_, ev, now_ms);
+        return true;
+    }
+    return false;
+}
 
 void StatusCard::invalidate() {
     ever_drawn_ = false;
@@ -29,6 +59,17 @@ void StatusCard::tick(uint32_t now_ms) {
         last_recheck_ms_ = now_ms;
         // No-op: the live flag is read at render time. The 1s tick is just
         // here so isDirty() flips true once liveness changes due to timeout.
+    }
+    // Advance the charging animation while charging. Outside of
+    // charging we keep anim_step_ at 0 so the discharge render is
+    // fully determined by percent.
+    if (state_.battery().present && state_.battery().charging) {
+        if (now_ms - last_anim_step_ms_ >= kChargeAnimMs) {
+            last_anim_step_ms_ = now_ms;
+            anim_step_ = (uint8_t)((anim_step_ + 1) & 0x03);
+        }
+    } else {
+        anim_step_ = 0;
     }
 }
 
@@ -43,6 +84,15 @@ bool StatusCard::isDirty() const {
     if (status.tokens_today != last_drawn_tokens_today_) return true;
     if (strncmp(last_drawn_msg_, status.msg, sizeof(last_drawn_msg_)) != 0) return true;
     if (state_.isLive(millis()) != last_drawn_live_) return true;
+    const BatteryStatus& bat = state_.battery();
+    if (bat.present  != last_drawn_battery_present_)  return true;
+    if (bat.percent  != last_drawn_battery_pct_)      return true;
+    if (bat.charging != last_drawn_battery_charging_) return true;
+    if (bat.charging && anim_step_ != last_drawn_anim_step_) return true;
+    const bool collapsed = (prompt_.mode == PROMPT_UI_COLLAPSED);
+    if (collapsed != last_drawn_prompt_collapsed_) return true;
+    if (collapsed && strncmp(last_drawn_prompt_tool_, prompt_.tool,
+                              sizeof(last_drawn_prompt_tool_)) != 0) return true;
     return false;
 }
 
@@ -121,38 +171,76 @@ void StatusCard::render(Display& display) {
         }
     }
 
-    // Message block (size 1, white, two lines at y=92 and y=104).
-    // Repaint when msg changes. Erase 240×24 to cover both lines plus
-    // a 1-px margin so a shorter new message can't leave trailing
-    // chars from the old one.
+    // Message block / prompt badge (y=92..115). When a permission
+    // prompt is COLLAPSED, the badge takes over this slot so the
+    // user sees the same approve-prompt UI as on the eyes card.
+    // Otherwise, the regular two-line msg renders here. The two
+    // share an erase rect so a transition between them wipes
+    // everything cleanly.
+    const bool collapsed = (prompt_.mode == PROMPT_UI_COLLAPSED);
     const bool msg_changed = state_changed ||
                              (strncmp(last_drawn_msg_, status.msg,
                                       sizeof(last_drawn_msg_)) != 0);
-    if (msg_changed) {
+    const bool prompt_changed = state_changed ||
+                                (collapsed != last_drawn_prompt_collapsed_) ||
+                                (collapsed && strncmp(last_drawn_prompt_tool_,
+                                                      prompt_.tool,
+                                                      sizeof(last_drawn_prompt_tool_)) != 0);
+    if (msg_changed || prompt_changed) {
         if (!state_changed) {
             tft.fillRect(0, 92, 240, 24, ST77XX_BLACK);
         }
-        tft.setTextSize(1);
-        tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-        if (status.msg[0]) {
-            tft.setCursor(8, 92);
-            tft.printf("%.34s", status.msg);
-            if (strlen(status.msg) > 34) {
-                tft.setCursor(8, 104);
-                tft.printf("%.34s", status.msg + 34);
+        if (collapsed) {
+            ui::drawPromptBadge(tft, prompt_.tool);
+        } else {
+            tft.setTextSize(1);
+            tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+            if (status.msg[0]) {
+                tft.setCursor(8, 92);
+                tft.printf("%.34s", status.msg);
+                if (strlen(status.msg) > 34) {
+                    tft.setCursor(8, 104);
+                    tft.printf("%.34s", status.msg + 34);
+                }
             }
         }
     }
 
     // Footer band (y=117 .. 134). Repaint when liveness flips. The
     // device name is treated as static here — drawFooter handles its
-    // own internal layout.
+    // own internal layout. The battery widget shares this band on
+    // the right side; it lives in y=120..130 so it sits inside the
+    // footer's erase rect, which is why a footer redraw also forces
+    // a battery redraw below.
     const bool footer_changed = state_changed || (last_drawn_live_ != live);
     if (footer_changed) {
         if (!state_changed) {
             tft.fillRect(0, ui::kFooterTopY, 240, ui::kFooterH, ST77XX_BLACK);
         }
         ui::drawFooter(tft, state_.deviceName(), live);
+    }
+
+    // Battery widget (right edge of footer band). Hidden when the
+    // fuel gauge isn't present (e.g. older board revision or chip
+    // not detected at boot). When charging, the bars cycle 1→2→3→4
+    // so the user sees the icon "filling up"; when discharging, the
+    // bar count maps to percent thresholds (see BatteryWidget.cpp).
+    const BatteryStatus& bat = state_.battery();
+    const bool battery_changed = state_changed || footer_changed ||
+                                 (last_drawn_battery_present_  != bat.present)  ||
+                                 (last_drawn_battery_pct_      != bat.percent)  ||
+                                 (last_drawn_battery_charging_ != bat.charging) ||
+                                 (bat.charging && last_drawn_anim_step_ != anim_step_);
+    if (battery_changed) {
+        if (!state_changed && !footer_changed) {
+            // Footer redraw already wiped this rect; skip the
+            // duplicate erase to keep the per-frame cost tiny.
+            tft.fillRect(ui::kBatteryEraseX, ui::kBatteryEraseY,
+                         ui::kBatteryEraseW, ui::kBatteryEraseH, ST77XX_BLACK);
+        }
+        if (bat.present) {
+            ui::drawBatteryWidget(tft, bat.percent, bat.charging, anim_step_);
+        }
     }
 
     // Snapshot every tracked value.
@@ -163,7 +251,15 @@ void StatusCard::render(Display& display) {
     last_drawn_valid_         = status.valid;
     strncpy(last_drawn_msg_, status.msg, sizeof(last_drawn_msg_) - 1);
     last_drawn_msg_[sizeof(last_drawn_msg_) - 1] = 0;
-    last_drawn_live_          = live;
-    last_drawn_tokens_today_  = status.tokens_today;
-    ever_drawn_               = true;
+    last_drawn_live_              = live;
+    last_drawn_tokens_today_      = status.tokens_today;
+    last_drawn_battery_present_   = bat.present;
+    last_drawn_battery_pct_       = bat.percent;
+    last_drawn_battery_charging_  = bat.charging;
+    last_drawn_anim_step_         = anim_step_;
+    last_drawn_prompt_collapsed_  = collapsed;
+    strncpy(last_drawn_prompt_tool_, prompt_.tool,
+            sizeof(last_drawn_prompt_tool_) - 1);
+    last_drawn_prompt_tool_[sizeof(last_drawn_prompt_tool_) - 1] = 0;
+    ever_drawn_                   = true;
 }

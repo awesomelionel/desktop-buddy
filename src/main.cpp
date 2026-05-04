@@ -5,6 +5,7 @@
 #include "core/EventBus.h"
 #include "core/Settings.h"
 #include "display/Display.h"
+#include "hal/Battery.h"
 #include "input/InputRouter.h"
 #include "net/BleLink.h"
 #include "net/HttpServer.h"
@@ -23,6 +24,7 @@ static const uint32_t FRAME_PACING_MS          = 16;
 
 static Display      display;
 static AppState     appState;
+static Battery      battery;
 static EventBus     eventBus;
 static Settings     settingsStore;  // class Settings (the wrapper); the lowercase 'settings' namespace lives in lib/settings, so we name the global differently to avoid a token clash.
 static ConfigStore  configStore;
@@ -62,6 +64,7 @@ void setup() {
     appState.setSettings(&settingsStore);
 
     display.begin();
+    battery.begin();
     inputRouter.begin();
     prompt_ui_init(&promptUi);
     configStore.begin();
@@ -105,6 +108,14 @@ void loop() {
     bleLink.tick(now);
     wifiManager.tick(now);
     httpServer.tick(now);
+    battery.tick(now);
+    {
+        BatteryStatus bs;
+        bs.present  = battery.present();
+        bs.percent  = battery.percent();
+        bs.charging = battery.charging();
+        appState.setBattery(bs);
+    }
     appState.setBuddyState(state_derive(appState.status(), appState.isLive(now)));
 
     inputRouter.tick(now);
