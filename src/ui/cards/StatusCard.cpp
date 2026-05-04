@@ -11,7 +11,8 @@ StatusCard::StatusCard(const AppState& state)
       last_drawn_state_(STATE_DISCONNECTED),
       last_drawn_msg_{0},
       last_drawn_live_(false),
-      last_recheck_ms_(0) {}
+      last_recheck_ms_(0),
+      last_drawn_tokens_today_(0xFFFFFFFFu) {}
 
 void StatusCard::invalidate() {
     ever_drawn_ = false;
@@ -52,16 +53,18 @@ void StatusCard::render(Display& display) {
 
     tft.setTextSize(1);
     tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
-    tft.setCursor(8, 62);
+    tft.setCursor(8, 58);            // moved up from 62
     tft.printf("total %u  run %u  wait %u",
                status.total, status.running, status.waiting);
 
+    // Token line slot (y=70) — implemented in the next task.
+
     tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
     if (status.msg[0]) {
-        tft.setCursor(8, 80);
+        tft.setCursor(8, 92);        // moved down from 80
         tft.printf("%.34s", status.msg);
         if (strlen(status.msg) > 34) {
-            tft.setCursor(8, 92);
+            tft.setCursor(8, 104);   // moved down from 92
             tft.printf("%.34s", status.msg + 34);
         }
     }
@@ -72,5 +75,6 @@ void StatusCard::render(Display& display) {
     strncpy(last_drawn_msg_, status.msg, sizeof(last_drawn_msg_) - 1);
     last_drawn_msg_[sizeof(last_drawn_msg_) - 1] = 0;
     last_drawn_live_ = live;
+    last_drawn_tokens_today_ = status.tokens_today;
     ever_drawn_      = true;
 }

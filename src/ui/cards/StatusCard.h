@@ -27,4 +27,5 @@ private:
     char            last_drawn_msg_[sizeof(ClaudeStatus::msg)];
     bool            last_drawn_live_;
     uint32_t        last_recheck_ms_;
+    uint32_t        last_drawn_tokens_today_;
 };
