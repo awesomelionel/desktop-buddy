@@ -10,7 +10,7 @@
 // threshold. Worst-case rendered width is 5 chars + NUL.
 //
 //   n <      1 000  →  integer        e.g. "0", "7", "523"
-//   n <     99 500  →  one decimal K  e.g. "1.0K", "9.9K", "31.2K", "99.4K"
+//   n <     99 500  →  one decimal K  e.g. "1.0K", "9.9K", "31.2K", "99.5K"
 //   n <    999 500  →  integer K      e.g. "100K", "523K", "999K"
 //   n <  9 950 000  →  one decimal M  e.g. "1.0M", "4.3M", "9.9M"
 //   n >= 9 950 000  →  integer M      e.g. "10M", "42M"
