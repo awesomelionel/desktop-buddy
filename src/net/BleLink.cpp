@@ -48,6 +48,23 @@ void BleLink::tick(uint32_t now_ms) {
                     if (protocol_parse_line(line_buf_, &app_.mutableStatus())) {
                         app_.markSnapshot(now_ms);
                         Serial.printf("[rx] %s\n", line_buf_);
+
+                        const ClaudeStatus& st = app_.status();
+
+                        // PromptArrived: present, has an id, and id differs from previous.
+                        if (st.prompt.present && st.prompt.id[0] != 0 &&
+                            strncmp(prev_prompt_id_, st.prompt.id, sizeof(prev_prompt_id_)) != 0) {
+                            strncpy(prev_prompt_id_, st.prompt.id, sizeof(prev_prompt_id_) - 1);
+                            prev_prompt_id_[sizeof(prev_prompt_id_) - 1] = 0;
+                            if (bus_) bus_->publish(EventKind::PromptArrived);
+                        }
+
+                        // TokensChanged: any change to tokens_today.
+                        if (st.tokens_today != prev_tokens_today_) {
+                            prev_tokens_today_ = st.tokens_today;
+                            if (bus_) bus_->publish(EventKind::TokensChanged);
+                        }
+
                         if (bus_) bus_->publish(EventKind::SnapshotReceived);
                     }
                 }

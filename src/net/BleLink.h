@@ -42,6 +42,8 @@ private:
     EventBus*       bus_      = nullptr;
     const Settings* settings_ = nullptr;
     char            current_name_[16] = {0};
+    char            prev_prompt_id_[40] = {0};
+    uint32_t        prev_tokens_today_  = 0;
 
     // Snapshot lines can carry an entries[] transcript; REFERENCE.md caps
     // event payloads at 4KB. 4096 + 1 trailing null = max wire size.
