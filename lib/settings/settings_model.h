@@ -20,11 +20,20 @@ constexpr uint16_t LIVE_TIMEOUT_MIN_S  = 5;
 constexpr uint16_t LIVE_TIMEOUT_MAX_S  = 300;
 constexpr uint16_t SLEEP_TIMEOUT_MIN_S = 30;   // 0 also valid (= disabled)
 constexpr uint16_t SLEEP_TIMEOUT_MAX_S = 3600;
+constexpr uint16_t DIM_TIMEOUT_MIN_S   = 5;    // 0 also valid (= disabled)
+constexpr uint16_t DIM_TIMEOUT_MAX_S   = 3600;
+constexpr uint8_t  DIM_LEVEL_MIN_PCT   = 1;
+constexpr uint8_t  DIM_LEVEL_MAX_PCT   = 99;
+constexpr uint8_t  FULL_LEVEL_MIN_PCT  = 1;
+constexpr uint8_t  FULL_LEVEL_MAX_PCT  = 100;
 
 struct Settings {
     char     device_name[MAX_DEVICE_NAME_LEN + 1];
     uint16_t live_timeout_s;
     uint16_t sleep_timeout_s;     // 0 = always on
+    uint16_t dim_timeout_s;       // 0 = never dim
+    uint8_t  dim_level_pct;       // 1..99
+    uint8_t  full_level_pct;      // 1..100
     uint8_t  cards_enabled_mask;  // bit i set = CardId i is enabled
     uint8_t  cards_order[CARD_COUNT];  // permutation; first cards_order_count entries valid
     uint8_t  cards_order_count;

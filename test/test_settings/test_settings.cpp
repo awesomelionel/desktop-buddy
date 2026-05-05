@@ -2,6 +2,9 @@
 #include <string.h>
 #include "settings_model.h"
 
+// Defined in test_settings_backlight.cpp
+void test_backlight_defaults(void);
+
 using namespace settings;
 
 void setUp(void) {}
@@ -164,5 +167,6 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_apply_cards_happy_path);
     RUN_TEST(test_to_json_contains_expected_keys);
     RUN_TEST(test_to_json_buffer_too_small_returns_zero);
+    RUN_TEST(test_backlight_defaults);
     return UNITY_END();
 }
