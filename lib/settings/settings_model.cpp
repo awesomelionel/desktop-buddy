@@ -227,6 +227,22 @@ bool applyCardsFields(Settings& s,
     return true;
 }
 
+bool applyBacklightFields(Settings& s,
+                          uint16_t dim_timeout_s,
+                          uint8_t  dim_level_pct,
+                          uint8_t  full_level_pct,
+                          char* error, size_t error_len) {
+    if (!isValidDimTimeout(dim_timeout_s, error, error_len)) return false;
+    if (!isValidDimLevelPct(dim_level_pct, error, error_len)) return false;
+    if (!isValidFullLevelPct(full_level_pct, error, error_len)) return false;
+    if (!isValidDimVsSleep(dim_timeout_s, s.sleep_timeout_s,
+                           error, error_len)) return false;
+    s.dim_timeout_s   = dim_timeout_s;
+    s.dim_level_pct   = dim_level_pct;
+    s.full_level_pct  = full_level_pct;
+    return true;
+}
+
 const char* cardName(CardId id) {
     switch (id) {
         case CARD_STATUS:  return "Status";
@@ -246,11 +262,17 @@ size_t toJson(const Settings& s, char* buf, size_t buf_len) {
         "{\"device_name\":\"%s\","
         "\"live_timeout_s\":%u,"
         "\"sleep_timeout_s\":%u,"
+        "\"dim_timeout_s\":%u,"
+        "\"dim_level_pct\":%u,"
+        "\"full_level_pct\":%u,"
         "\"boot_card_id\":%u,"
         "\"cards\":[",
         s.device_name,
         (unsigned)s.live_timeout_s,
         (unsigned)s.sleep_timeout_s,
+        (unsigned)s.dim_timeout_s,
+        (unsigned)s.dim_level_pct,
+        (unsigned)s.full_level_pct,
         (unsigned)s.boot_card_id);
     if (written < 0 || (size_t)written >= buf_len) return 0;
     size_t pos = (size_t)written;

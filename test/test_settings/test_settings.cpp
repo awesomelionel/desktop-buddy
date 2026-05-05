@@ -18,6 +18,9 @@ void test_dim_level_above_max_rejected(void);
 void test_full_level_max_accepted(void);
 void test_full_level_zero_rejected(void);
 void test_sleep_zero_with_dim_set_accepted(void);
+void test_apply_backlight_ok(void);
+void test_apply_backlight_bad_pct_rejected(void);
+void test_tojson_includes_backlight(void);
 
 using namespace settings;
 
@@ -196,5 +199,8 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_full_level_max_accepted);
     RUN_TEST(test_full_level_zero_rejected);
     RUN_TEST(test_sleep_zero_with_dim_set_accepted);
+    RUN_TEST(test_apply_backlight_ok);
+    RUN_TEST(test_apply_backlight_bad_pct_rejected);
+    RUN_TEST(test_tojson_includes_backlight);
     return UNITY_END();
 }

@@ -65,6 +65,14 @@ bool applyCardsFields(Settings& s,
                       uint8_t boot_card_id,
                       char* error, size_t error_len);
 
+// Patch with new backlight fields. Validates per the rules in validate().
+// Returns true on success; false leaves s unchanged and writes the reason.
+bool applyBacklightFields(Settings& s,
+                          uint16_t dim_timeout_s,
+                          uint8_t  dim_level_pct,
+                          uint8_t  full_level_pct,
+                          char* error, size_t error_len);
+
 // Render Settings as a single JSON object into buf. Returns the number of
 // chars written (excluding null), or 0 if buf_len is too small.
 //

@@ -125,3 +125,32 @@ void test_sleep_zero_with_dim_set_accepted(void) {
     char err[64] = {};
     TEST_ASSERT_TRUE(validate(s, err, sizeof(err)));
 }
+
+void test_apply_backlight_ok(void) {
+    Settings s = make_defaults();
+    char err[64] = {};
+    TEST_ASSERT_TRUE(applyBacklightFields(s, /*dim_s*/15, /*dim_pct*/25,
+                                           /*full_pct*/90, err, sizeof(err)));
+    TEST_ASSERT_EQUAL_UINT16(15, s.dim_timeout_s);
+    TEST_ASSERT_EQUAL_UINT8(25, s.dim_level_pct);
+    TEST_ASSERT_EQUAL_UINT8(90, s.full_level_pct);
+}
+
+void test_apply_backlight_bad_pct_rejected(void) {
+    Settings s = make_defaults();
+    char err[64] = {};
+    TEST_ASSERT_FALSE(applyBacklightFields(s, 30, 0 /*invalid*/, 100,
+                                            err, sizeof(err)));
+    // Ensure the original was not mutated.
+    TEST_ASSERT_EQUAL_UINT8(40, s.dim_level_pct);
+}
+
+void test_tojson_includes_backlight(void) {
+    Settings s = make_defaults();
+    char buf[1024] = {};
+    size_t n = toJson(s, buf, sizeof(buf));
+    TEST_ASSERT_NOT_EQUAL(0, n);
+    TEST_ASSERT_TRUE(strstr(buf, "\"dim_timeout_s\":30") != nullptr);
+    TEST_ASSERT_TRUE(strstr(buf, "\"dim_level_pct\":40") != nullptr);
+    TEST_ASSERT_TRUE(strstr(buf, "\"full_level_pct\":100") != nullptr);
+}
