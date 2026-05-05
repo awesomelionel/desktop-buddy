@@ -64,3 +64,64 @@ void test_dim_zero_with_sleep_set_accepted(void) {
     char err[64] = {};
     TEST_ASSERT_TRUE(validate(s, err, sizeof(err)));
 }
+
+void test_dim_timeout_min_accepted(void) {
+    Settings s = make_defaults();
+    s.dim_timeout_s = DIM_TIMEOUT_MIN_S;       // 5
+    // sleep_timeout_s defaults to 0 so cross-field rule does not kick in.
+    char err[64] = {};
+    TEST_ASSERT_TRUE(validate(s, err, sizeof(err)));
+}
+
+void test_dim_timeout_max_accepted(void) {
+    Settings s = make_defaults();
+    s.dim_timeout_s = DIM_TIMEOUT_MAX_S;       // 3600
+    char err[64] = {};
+    TEST_ASSERT_TRUE(validate(s, err, sizeof(err)));
+}
+
+void test_dim_timeout_above_max_rejected(void) {
+    Settings s = make_defaults();
+    s.dim_timeout_s = DIM_TIMEOUT_MAX_S + 1;   // 3601
+    char err[64] = {};
+    TEST_ASSERT_FALSE(validate(s, err, sizeof(err)));
+    TEST_ASSERT_TRUE(strstr(err, "dim_timeout_s") != nullptr);
+}
+
+void test_dim_level_max_accepted(void) {
+    Settings s = make_defaults();
+    s.dim_level_pct = DIM_LEVEL_MAX_PCT;       // 99
+    char err[64] = {};
+    TEST_ASSERT_TRUE(validate(s, err, sizeof(err)));
+}
+
+void test_dim_level_above_max_rejected(void) {
+    Settings s = make_defaults();
+    s.dim_level_pct = DIM_LEVEL_MAX_PCT + 1;   // 100
+    char err[64] = {};
+    TEST_ASSERT_FALSE(validate(s, err, sizeof(err)));
+    TEST_ASSERT_TRUE(strstr(err, "dim_level_pct") != nullptr);
+}
+
+void test_full_level_max_accepted(void) {
+    Settings s = make_defaults();
+    s.full_level_pct = FULL_LEVEL_MAX_PCT;     // 100
+    char err[64] = {};
+    TEST_ASSERT_TRUE(validate(s, err, sizeof(err)));
+}
+
+void test_full_level_zero_rejected(void) {
+    Settings s = make_defaults();
+    s.full_level_pct = 0;                       // below FULL_LEVEL_MIN_PCT
+    char err[64] = {};
+    TEST_ASSERT_FALSE(validate(s, err, sizeof(err)));
+    TEST_ASSERT_TRUE(strstr(err, "full_level_pct") != nullptr);
+}
+
+void test_sleep_zero_with_dim_set_accepted(void) {
+    Settings s = make_defaults();
+    s.dim_timeout_s   = 30;
+    s.sleep_timeout_s = 0;     // sleep disabled, dim non-zero — fine
+    char err[64] = {};
+    TEST_ASSERT_TRUE(validate(s, err, sizeof(err)));
+}
