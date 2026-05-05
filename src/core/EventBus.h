@@ -20,6 +20,9 @@ enum class EventKind : uint8_t {
     WifiConnected,      // WifiManager reached STA_CONNECTED
     WifiDisconnected,   // WifiManager left STA_CONNECTED
     SettingsChanged,    // any field on core/Settings persisted
+    StatusTransitioned, // BuddyState transitioned (publisher: main loop)
+    PromptArrived,      // new non-empty prompt id received
+    TokensChanged,      // tokens_today changed value
     Count_,
 };
 
