@@ -116,7 +116,14 @@ void loop() {
         bs.charging = battery.charging();
         appState.setBattery(bs);
     }
-    appState.setBuddyState(state_derive(appState.status(), appState.isLive(now)));
+    {
+        BuddyState prev = appState.buddyState();
+        BuddyState next = state_derive(appState.status(), appState.isLive(now));
+        if (next != prev) {
+            appState.setBuddyState(next);
+            eventBus.publish(EventKind::StatusTransitioned);
+        }
+    }
 
     inputRouter.tick(now);
     cardController.tick(now, display);
