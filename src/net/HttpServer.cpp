@@ -273,6 +273,21 @@ void HttpServer::registerStaHandlers() {
                   "<input id=st name=sleep_timeout_s type=number min=0 max=3600 required>"
                   "<p class=tip>Backlight off after N seconds idle. 0 disables. Otherwise 30..3600.</p>"
                 "</div>"
+                "<div class=form-group>"
+                  "<label for=dt>Dim timeout (s)</label>"
+                  "<input id=dt name=dim_timeout_s type=number min=0 max=3600 required>"
+                  "<p class=tip>Backlight dims after N seconds idle. 0 disables. Otherwise 5..3600. Must be less than sleep timeout.</p>"
+                "</div>"
+                "<div class=form-group>"
+                  "<label for=dl>Dim level (%)</label>"
+                  "<input id=dl name=dim_level_pct type=number min=1 max=99 required>"
+                  "<p class=tip>Brightness while dimmed. 1..99.</p>"
+                "</div>"
+                "<div class=form-group>"
+                  "<label for=fl>Full level (%)</label>"
+                  "<input id=fl name=full_level_pct type=number min=1 max=100 required>"
+                  "<p class=tip>Brightness while active. 1..100.</p>"
+                "</div>"
                 "<button type=submit>Save device</button>"
                 "<p id=device-msg class=status-msg></p>"
               "</form>"
@@ -363,6 +378,9 @@ void HttpServer::registerStaHandlers() {
               "$('dn').value=s.device_name;"
               "$('lt').value=s.live_timeout_s;"
               "$('st').value=s.sleep_timeout_s;"
+              "$('dt').value=s.dim_timeout_s;"
+              "$('dl').value=s.dim_level_pct;"
+              "$('fl').value=s.full_level_pct;"
               "cardCatalog=s.cards.slice().sort((a,b)=>("
                 "(a.order==null?99:a.order)-(b.order==null?99:b.order)"
               "));"
@@ -500,15 +518,24 @@ void HttpServer::registerStaHandlers() {
     // ---- /api/settings/device
     server_->on("/api/settings/device", HTTP_POST, [this]() {
         if (!server_->hasArg("name") || !server_->hasArg("live_timeout_s") ||
-            !server_->hasArg("sleep_timeout_s")) {
+            !server_->hasArg("sleep_timeout_s") ||
+            !server_->hasArg("dim_timeout_s") ||
+            !server_->hasArg("dim_level_pct") ||
+            !server_->hasArg("full_level_pct")) {
             sendJsonError(server_, 400, "missing field");
             return;
         }
         String name = server_->arg("name");
         long lt = server_->arg("live_timeout_s").toInt();
         long st = server_->arg("sleep_timeout_s").toInt();
-        if (lt < 0 || lt > 0xFFFF || st < 0 || st > 0xFFFF) {
-            sendJsonError(server_, 400, "timeout out of range");
+        long dt = server_->arg("dim_timeout_s").toInt();
+        long dl = server_->arg("dim_level_pct").toInt();
+        long fl = server_->arg("full_level_pct").toInt();
+        if (lt < 0 || lt > 0xFFFF || st < 0 || st > 0xFFFF ||
+            dt < 0 || dt > 0xFFFF ||
+            dl < 0 || dl > 0xFF ||
+            fl < 0 || fl > 0xFF) {
+            sendJsonError(server_, 400, "field out of range");
             return;
         }
         char err[64] = {};
@@ -516,6 +543,13 @@ void HttpServer::registerStaHandlers() {
                                    static_cast<uint16_t>(lt),
                                    static_cast<uint16_t>(st),
                                    err, sizeof(err))) {
+            sendJsonError(server_, 400, err);
+            return;
+        }
+        if (!settings_.applyBacklight(static_cast<uint16_t>(dt),
+                                      static_cast<uint8_t>(dl),
+                                      static_cast<uint8_t>(fl),
+                                      err, sizeof(err))) {
             sendJsonError(server_, 400, err);
             return;
         }
