@@ -78,8 +78,9 @@ bool applyBacklightFields(Settings& s,
 //
 // Shape:
 //   {"device_name":"...","live_timeout_s":N,"sleep_timeout_s":N,
-//    "cards":[{"id":N,"name":"...","enabled":bool,"order":N}, ...],
-//    "boot_card_id":N}
+//    "dim_timeout_s":N,"dim_level_pct":N,"full_level_pct":N,
+//    "boot_card_id":N,
+//    "cards":[{"id":N,"name":"...","enabled":bool,"order":N}, ...]}
 size_t toJson(const Settings& s, char* buf, size_t buf_len);
 
 // Human-readable card name, stable for use in JSON / UI labels.
