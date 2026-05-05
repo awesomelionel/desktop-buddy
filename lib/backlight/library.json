@@ -1,0 +1,6 @@
+{
+  "name": "backlight",
+  "version": "0.1.0",
+  "description": "Backlight duty computation (idle-driven state machine)",
+  "build": { "flags": ["-std=gnu++17"] }
+}
