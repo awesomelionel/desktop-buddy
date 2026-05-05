@@ -4,6 +4,12 @@
 
 // Defined in test_settings_backlight.cpp
 void test_backlight_defaults(void);
+void test_dim_timeout_zero_accepted(void);
+void test_dim_timeout_too_low_rejected(void);
+void test_dim_level_zero_rejected(void);
+void test_full_level_over_100_rejected(void);
+void test_dim_must_precede_sleep(void);
+void test_dim_zero_with_sleep_set_accepted(void);
 
 using namespace settings;
 
@@ -168,5 +174,11 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_to_json_contains_expected_keys);
     RUN_TEST(test_to_json_buffer_too_small_returns_zero);
     RUN_TEST(test_backlight_defaults);
+    RUN_TEST(test_dim_timeout_zero_accepted);
+    RUN_TEST(test_dim_timeout_too_low_rejected);
+    RUN_TEST(test_dim_level_zero_rejected);
+    RUN_TEST(test_full_level_over_100_rejected);
+    RUN_TEST(test_dim_must_precede_sleep);
+    RUN_TEST(test_dim_zero_with_sleep_set_accepted);
     return UNITY_END();
 }

@@ -54,6 +54,43 @@ bool isValidSleepTimeout(uint16_t v, char* error, size_t error_len) {
     return true;
 }
 
+bool isValidDimTimeout(uint16_t v, char* error, size_t error_len) {
+    if (v == 0) return true;
+    if (v < DIM_TIMEOUT_MIN_S || v > DIM_TIMEOUT_MAX_S) {
+        writeError(error, error_len,
+                   "dim_timeout_s out of range (0 or 5..3600)");
+        return false;
+    }
+    return true;
+}
+
+bool isValidDimLevelPct(uint8_t v, char* error, size_t error_len) {
+    if (v < DIM_LEVEL_MIN_PCT || v > DIM_LEVEL_MAX_PCT) {
+        writeError(error, error_len, "dim_level_pct out of range (1..99)");
+        return false;
+    }
+    return true;
+}
+
+bool isValidFullLevelPct(uint8_t v, char* error, size_t error_len) {
+    if (v < FULL_LEVEL_MIN_PCT || v > FULL_LEVEL_MAX_PCT) {
+        writeError(error, error_len, "full_level_pct out of range (1..100)");
+        return false;
+    }
+    return true;
+}
+
+bool isValidDimVsSleep(uint16_t dim_s, uint16_t sleep_s,
+                       char* error, size_t error_len) {
+    // Constraint applies only when both are non-zero.
+    if (dim_s != 0 && sleep_s != 0 && dim_s >= sleep_s) {
+        writeError(error, error_len,
+                   "dim_timeout_s must be before sleep_timeout_s");
+        return false;
+    }
+    return true;
+}
+
 bool isValidCards(uint8_t enabled_mask, const uint8_t* order, uint8_t count,
                   char* error, size_t error_len) {
     if (enabled_mask == 0) {
@@ -125,6 +162,11 @@ bool validate(const Settings& s, char* error, size_t error_len) {
     if (!isValidDeviceName(s.device_name, error, error_len)) return false;
     if (!isValidLiveTimeout(s.live_timeout_s, error, error_len)) return false;
     if (!isValidSleepTimeout(s.sleep_timeout_s, error, error_len)) return false;
+    if (!isValidDimTimeout(s.dim_timeout_s, error, error_len)) return false;
+    if (!isValidDimLevelPct(s.dim_level_pct, error, error_len)) return false;
+    if (!isValidFullLevelPct(s.full_level_pct, error, error_len)) return false;
+    if (!isValidDimVsSleep(s.dim_timeout_s, s.sleep_timeout_s,
+                           error, error_len)) return false;
     if (!isValidCards(s.cards_enabled_mask, s.cards_order, s.cards_order_count,
                       error, error_len)) return false;
     if (s.boot_card_id >= CARD_COUNT) {
