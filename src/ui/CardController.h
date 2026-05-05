@@ -20,8 +20,9 @@ class Display;
 class BleLink;
 
 // Owns the card carousel + prompt overlay, listens to EventBus, drains
-// outgoing PromptUi decisions to BleLink, and runs the sleep manager
-// (backlight off after settings.sleep_timeout_s of input idleness).
+// outgoing PromptUi decisions to BleLink, and runs the backlight manager
+// (FULL → DIM → OFF backlight management driven by input idleness +
+// meaningful EventBus wakes).
 class CardController {
 public:
     CardController(AppState& app, EventBus& bus, WifiManager& wifi,
@@ -41,7 +42,7 @@ public:
 
 private:
     void rebuildStack();
-    void runSleepManager(uint32_t now_ms, Display& display);
+    void runBacklightManager(uint32_t now_ms, Display& display);
 
     AppState&    app_;
     EventBus&    bus_;
@@ -50,6 +51,7 @@ private:
     BleLink&     ble_;
     Settings&    settings_;
     InputRouter* input_ = nullptr;
+    uint32_t     last_activity_ms_ = 0;
 
     StatusCard   status_card_;
     EyesCard     eyes_card_;

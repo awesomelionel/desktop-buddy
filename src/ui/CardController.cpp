@@ -5,6 +5,7 @@
 
 #include "../display/Display.h"
 #include "../net/BleLink.h"
+#include "backlight.h"
 
 CardController::CardController(AppState& app, EventBus& bus, WifiManager& wifi,
                                PromptUi& prompt, BleLink& ble, Settings& settings,
@@ -42,6 +43,19 @@ void CardController::begin() {
                    [this] { wifi_card_.invalidate(); });
     bus_.subscribe(EventKind::SettingsChanged,
                    [this] { rebuildStack(); });
+
+    last_activity_ms_ = millis();
+
+    auto bump_activity = [this] {
+        last_activity_ms_ = millis();
+    };
+    bus_.subscribe(EventKind::StatusTransitioned, bump_activity);
+    bus_.subscribe(EventKind::PromptArrived,      bump_activity);
+    bus_.subscribe(EventKind::TokensChanged,      bump_activity);
+    // WifiConnected/WifiDisconnected are already subscribed for invalidate;
+    // also bump activity from them.
+    bus_.subscribe(EventKind::WifiConnected,    bump_activity);
+    bus_.subscribe(EventKind::WifiDisconnected, bump_activity);
 }
 
 namespace {
@@ -105,26 +119,26 @@ void CardController::rebuildStack() {
     applied_boot_card_       = true;
 }
 
-void CardController::runSleepManager(uint32_t now_ms, Display& display) {
+void CardController::runBacklightManager(uint32_t now_ms, Display& display) {
     if (!input_) return;
-    uint16_t timeout_s = settings_.data().sleep_timeout_s;
-    if (timeout_s == 0) {
-        if (display.isAsleep()) display.setBacklight(true);
-        return;
-    }
-    uint32_t since = now_ms - input_->lastInputMs();
-    bool want_sleep = since >= static_cast<uint32_t>(timeout_s) * 1000UL;
-    if (want_sleep && !display.isAsleep()) {
-        display.setBacklight(false);
-    } else if (!want_sleep && display.isAsleep()) {
-        display.setBacklight(true);
-        Card* a = stack_.active();
-        if (a) a->invalidate();
+
+    // Fold the latest input timestamp into our local clock so that input
+    // events that occurred since the last tick count as activity.
+    uint32_t last_input = input_->lastInputMs();
+    if (last_input > last_activity_ms_) last_activity_ms_ = last_input;
+
+    uint32_t idle_ms = now_ms - last_activity_ms_;
+    uint8_t  pct     = backlight_compute_duty(idle_ms, settings_.data());
+
+    bool was_off = display.isAsleep();
+    display.setBacklight(pct);
+    if (was_off && pct != 0) {
+        if (Card* a = stack_.active()) a->invalidate();
     }
 }
 
 void CardController::tick(uint32_t now_ms, Display& display) {
-    runSleepManager(now_ms, display);
+    runBacklightManager(now_ms, display);
 
     prompt_ui_update(&prompt_, app_.status().prompt, app_.isLive(now_ms), now_ms);
 
