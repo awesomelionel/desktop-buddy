@@ -45,7 +45,7 @@ This is intentionally narrow:
 
 4. **Two small offscreen canvases (lazily allocated).** ~30 × 38 px per
    eye, used only during DONE — same lazy-allocation pattern as
-   `work_canvas_` and `wait_q_canvas_`. ~4.8 KB RAM total, allocated
+   `work_canvas_` and `wait_q_canvas_`. ~5.1 KB RAM total, allocated
    once on the first DONE entry and reused thereafter.
 
 ## Trigger logic
@@ -129,11 +129,13 @@ Three drawing primitives, all bbox-erase compliant per `CLAUDE.md`'s
 
 ### Eye shapes (bounce + arc): per-eye offscreen canvas
 
-- Two `GFXcanvas16` instances, sized `kEyeW × kDoneCanvasH` = 30 × 40
-  px. The canvas is positioned at `y = 44` and is 40 px tall, covering
-  44..84 — the full vertical range from the bounce-up apex (top=44)
-  to the settle-low bottom (top=56 + H=28 = 84). ~2.4 KB per eye,
-  ~4.8 KB total.
+- Two `GFXcanvas16` instances, sized 32 × 40 px. The 32-wide bound
+  accommodates the bounce-wide phase (W up to 32 in phases 1–2). The
+  canvas is positioned at `y = 44` and is 40 px tall, covering 44..84
+  — the full vertical range from the bounce-up apex (top=44) to the
+  settle-low bottom (top=56 + H=28 = 84). The canvas X is offset 1 px
+  to the left of each eye so its centerline matches the eye's
+  centerline. ~2.5 KB per eye, ~5.1 KB total.
 - Allocated lazily on the first DONE entry (`if (!done_canvas_l_)
   done_canvas_l_ = new GFXcanvas16(...)`). Persisted for the lifetime
   of the EyesCard — DONE happens often enough that per-task
@@ -203,8 +205,9 @@ const uint32_t kDoneMorphMs      = 150;
 const uint32_t kDoneHoldMs       = 750;
 // kDoneReturnMs = 400 (implicit: total - sum(others))
 
-const int      kDoneCanvasY      = 44;     // top of bounce-up apex
+const int      kDoneCanvasW      = 32;     // accommodates bounce-wide W=32
 const int      kDoneCanvasH      = 40;     // covers 44..84
+const int      kDoneCanvasY      = 44;     // top of bounce-up apex
 const int      kDoneArcH         = 16;
 const int      kDoneArcTop       = 56;
 const int      kDoneSparkleCx    = 220;
@@ -223,8 +226,8 @@ New private fields, grouped after the existing WAITING block:
 uint32_t      working_entered_ms_;
 bool          done_active_;
 uint32_t      done_start_ms_;
-GFXcanvas16*  done_canvas_l_;   // lazily allocated; ~2.4 KB
-GFXcanvas16*  done_canvas_r_;   // lazily allocated; ~2.4 KB
+GFXcanvas16*  done_canvas_l_;   // lazily allocated; ~2.5 KB
+GFXcanvas16*  done_canvas_r_;   // lazily allocated; ~2.5 KB
 
 // Dirty-tracking snapshot extension.
 bool          last_done_active_;
@@ -303,7 +306,7 @@ Manual on-device verification:
    confirm DISCONNECTED takes over cleanly.
 6. **No frame strobe:** stare at the eyes during the 1.5 s window; no
    full-screen flash. (CLAUDE.md fillScreen rule.)
-7. **RAM:** `ESP.getFreeHeap()` after first DONE drops by ~4.8 KB
+7. **RAM:** `ESP.getFreeHeap()` after first DONE drops by ~5.1 KB
    once (canvas alloc) and stays stable across many subsequent DONEs.
 
 No new automated tests in this iteration. The trigger logic is ~10
