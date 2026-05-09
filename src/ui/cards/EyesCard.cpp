@@ -477,8 +477,18 @@ void EyesCard::tickQuestionMarks(uint32_t now) {
     }
 }
 
-void EyesCard::tickDone(uint32_t /*now_ms*/) {
-    // Stub — implemented in Task 3.
+void EyesCard::tickDone(uint32_t now_ms) {
+    if (!done_active_) return;
+    // Any state other than IDLE cancels DONE immediately. The new state's
+    // armState will run its full_clear paint and wipe the celebration pixels.
+    if (state_.buddyState() != STATE_IDLE) {
+        done_active_ = false;
+        return;
+    }
+    // Natural exit at the timeout.
+    if ((now_ms - done_start_ms_) >= kDoneTotalMs) {
+        done_active_ = false;
+    }
 }
 
 void EyesCard::drawDoneFrame(Adafruit_ST7789& /*tft*/, uint32_t /*t*/) {
@@ -491,7 +501,21 @@ uint8_t EyesCard::doneSparkleCount(uint32_t /*t*/) const {
 
 void EyesCard::tick(uint32_t now_ms) {
     BuddyState state = state_.buddyState();
+
+    // ---- DONE celebration: detect WORKING -> IDLE edge ----
+    // prev_state_ still holds the OLD state at this point — armState (below)
+    // overwrites it. Conditions: previous was WORKING, current is IDLE,
+    // WORKING phase met the suppression threshold, and we're not already
+    // celebrating.
+    if (state == STATE_IDLE && prev_state_ == STATE_WORKING && !done_active_
+        && (now_ms - working_entered_ms_) >= kDoneSuppressMs) {
+        done_active_   = true;
+        done_start_ms_ = now_ms;
+    }
+
     if (state != prev_state_) armState(state, now_ms);
+
+    if (done_active_) tickDone(now_ms);
 
     switch (state) {
         case STATE_DISCONNECTED:
