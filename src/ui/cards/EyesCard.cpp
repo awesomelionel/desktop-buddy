@@ -491,8 +491,57 @@ void EyesCard::tickDone(uint32_t now_ms) {
     }
 }
 
-void EyesCard::drawDoneFrame(Adafruit_ST7789& /*tft*/, uint32_t /*t*/) {
-    // Stub — implemented in Tasks 4-6.
+void EyesCard::drawDoneFrame(Adafruit_ST7789& tft, uint32_t t) {
+    // Lazy-allocate the per-eye canvases on first use. Persisted for the
+    // card's lifetime; matches work_canvas_ / wait_q_canvas_ pattern.
+    if (!done_canvas_l_) done_canvas_l_ = new GFXcanvas16(kDoneCanvasW, kDoneCanvasH);
+    if (!done_canvas_r_) done_canvas_r_ = new GFXcanvas16(kDoneCanvasW, kDoneCanvasH);
+    if (!done_canvas_l_ || !done_canvas_r_) return;  // OOM: silently skip frame
+
+    // Compute current eye geometry from the timeline.
+    int  w, h, top_y;
+    bool ellipse_shape;
+
+    if (t < kDonePhase1End) {
+        // Phase 1: bounce up. H 30->38, W 30->32, top 52->44 (eased).
+        const float k = ease_out_cubic((float)t / (float)kDoneBounceUpMs);
+        w     = irlerp(30, 32, k);
+        h     = irlerp(30, 38, k);
+        top_y = irlerp(kBaseIdleY, 44, k);
+        ellipse_shape = false;
+    } else if (t < kDonePhase2End) {
+        // Phase 2: settle low. H 38->28, W 32, top 44->56 (eased).
+        const float k = ease_out_cubic((float)(t - kDonePhase1End) / (float)kDoneSettleLowMs);
+        w     = 32;
+        h     = irlerp(38, 28, k);
+        top_y = irlerp(44, 56, k);
+        ellipse_shape = false;
+    } else {
+        // Phases 3-5: TODO in Task 5. Hold the settle-low geometry for now
+        // so the build is exercisable.
+        w     = 30;
+        h     = 28;
+        top_y = 56;
+        ellipse_shape = false;
+    }
+
+    // Render each eye via the canvas: clear, draw shape, push as one bitmap.
+    // Eye is centered horizontally within the canvas (canvas is 32 px wide,
+    // eye is w px wide where w in {30, 31, 32}).
+    auto draw_eye = [&](GFXcanvas16* c, int canvas_x) {
+        c->fillScreen(ST77XX_BLACK);
+        const int local_top = top_y - kDoneCanvasY;
+        const int x_offset  = (kDoneCanvasW - w) / 2;
+        if (!ellipse_shape) {
+            c->fillRect(x_offset, local_top, w, h, ST77XX_WHITE);
+        }
+        // ellipse_shape branch added in Task 5.
+        tft.drawRGBBitmap(canvas_x, kDoneCanvasY, c->getBuffer(),
+                          kDoneCanvasW, kDoneCanvasH);
+    };
+
+    draw_eye(done_canvas_l_, kDoneCanvasLeftX);
+    draw_eye(done_canvas_r_, kDoneCanvasRightX);
 }
 
 uint8_t EyesCard::doneSparkleCount(uint32_t /*t*/) const {
@@ -612,14 +661,40 @@ bool EyesCard::isDirty() const {
 }
 
 void EyesCard::render(Display& display) {
+    Adafruit_ST7789& tft = display.tft();
     BuddyState bs = state_.buddyState();
-    bool stateJustChanged = !frame_valid_ || (last_state_ != bs);
-    // Per CLAUDE.md: incremental DISCONNECTED frames must use a partial erase
-    // to avoid the ~13 ms full-screen flash that causes flicker at 62 fps.
+
+    // ---- DONE celebration overlay ----
+    if (done_active_) {
+        const uint32_t t = millis() - done_start_ms_;
+        // First frame of DONE: clear the prior IDLE eye pixels so the canvas
+        // push doesn't leave a fringe. The canvas's own bbox covers y=44..84
+        // which fully contains the IDLE eye band (y=52..82), so a band-only
+        // erase suffices — no fillScreen.
+        if (!last_done_active_) {
+            tft.fillRect(kDoneCanvasLeftX,  kDoneCanvasY,
+                         kDoneCanvasW, kDoneCanvasH, ST77XX_BLACK);
+            tft.fillRect(kDoneCanvasRightX, kDoneCanvasY,
+                         kDoneCanvasW, kDoneCanvasH, ST77XX_BLACK);
+            tft.fillRect(kDoneSparkleBboxX, kDoneSparkleBboxY,
+                         kDoneSparkleBboxW, kDoneSparkleBboxH, ST77XX_BLACK);
+        }
+        drawDoneFrame(tft, t);
+        last_done_active_          = true;
+        last_done_phase_t_         = (t / 16) * 16;       // 16 ms buckets
+        last_sparkle_brightness_n_ = doneSparkleCount(t);
+        frame_valid_ = true;
+        return;
+    }
+
+    // ---- DONE just ended: force a full clear so leftover celebration pixels
+    //      are wiped and IDLE re-paints from a known-clean field.
+    bool stateJustChanged = !frame_valid_ || (last_state_ != bs)
+                          || last_done_active_;
     bool full_clear = stateJustChanged ||
                       (bs != STATE_DISCONNECTED && bs != STATE_WORKING &&
                        bs != STATE_WAITING && bs != STATE_IDLE);
-    drawFrame(display.tft(), bs, full_clear);
+    drawFrame(tft, bs, full_clear);
 
     last_state_    = bs;
     last_h_        = draw_h_;
@@ -630,6 +705,7 @@ void EyesCard::render(Display& display) {
     last_wait_gaze_dy_  = draw_wait_gaze_dy_;
     last_badge_visible_ = (bs == STATE_WAITING && prompt_.mode == PROMPT_UI_COLLAPSED);
     last_disc_age_ = disc_age_ms_;
+    last_done_active_   = false;
     frame_valid_   = true;
 }
 
