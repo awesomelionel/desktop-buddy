@@ -25,7 +25,13 @@ void Display::begin() {
 void Display::setBacklight(uint8_t pct) {
     if (pct > 100) pct = 100;
     if (pct == current_pct_) return;
-    uint32_t duty = (static_cast<uint32_t>(pct) * 255UL) / 100UL;
+    // Perceptual gamma. Human brightness perception is roughly the cube
+    // root of photon flux, so a linear pct->duty mapping makes "40%" look
+    // like ~73% brightness. Apply a 2.2 gamma so dim_level_pct=40 actually
+    // feels roughly half-bright. Only runs on transitions, so powf is fine.
+    float    linear = static_cast<float>(pct) / 100.0f;
+    float    gamma  = powf(linear, 2.2f);
+    uint32_t duty   = static_cast<uint32_t>(gamma * 255.0f + 0.5f);
     ledcWrite(TFT_BACKLITE, duty);
     current_pct_ = pct;
     asleep_      = (pct == 0);
