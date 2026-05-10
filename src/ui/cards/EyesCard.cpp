@@ -726,6 +726,20 @@ void EyesCard::tick(uint32_t now_ms) {
 bool EyesCard::isDirty() const {
     if (!frame_valid_) return true;
     if (last_state_      != state_.buddyState()) return true;
+
+    // ---- DONE: redraw whenever the celebration is active and any tracked
+    //      attribute has advanced. The hold pose (phase 4) leaves all three
+    //      tracked fields unchanged for ~750 ms, so we correctly suppress
+    //      redraws there.
+    if (last_done_active_ != done_active_) return true;
+    if (done_active_) {
+        const uint32_t t      = millis() - done_start_ms_;
+        const uint32_t bucket = (t / 16) * 16;
+        if (last_done_phase_t_         != bucket)              return true;
+        if (last_sparkle_brightness_n_ != doneSparkleCount(t)) return true;
+        return false;  // DONE bypasses the IDLE-era checks below
+    }
+
     if (last_h_          != draw_h_)            return true;
     if (last_dx_         != draw_dx_)           return true;
     if (last_base_y_     != draw_base_y_)       return true;
