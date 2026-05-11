@@ -1,6 +1,5 @@
 #include "github_releases_parse.h"
 
-#include <ArduinoJson.h>
 #include <string.h>
 
 namespace github_releases_parse {
@@ -21,13 +20,8 @@ void setError(char* err, size_t err_len, const char* msg) {
 
 }  // namespace
 
-bool parse(const char* json, ReleaseInfo& out, char* err, size_t err_len) {
-    if (!json) { setError(err, err_len, "null json"); return false; }
-
-    JsonDocument doc;
-    DeserializationError jerr = deserializeJson(doc, json);
-    if (jerr) { setError(err, err_len, jerr.c_str()); return false; }
-
+bool parseFromDocument(const JsonDocument& doc, ReleaseInfo& out,
+                       char* err, size_t err_len) {
     const char* tag = doc["tag_name"] | (const char*)nullptr;
     if (!tag || !*tag) { setError(err, err_len, "missing tag_name"); return false; }
     if (*tag == 'v' || *tag == 'V') ++tag;
@@ -37,8 +31,8 @@ bool parse(const char* json, ReleaseInfo& out, char* err, size_t err_len) {
     copyTruncated(out.body, sizeof(out.body), body);
 
     out.download_url[0] = 0;
-    JsonArray assets = doc["assets"];
-    for (JsonObject a : assets) {
+    JsonArrayConst assets = doc["assets"];
+    for (JsonObjectConst a : assets) {
         const char* name = a["name"] | "";
         if (strcmp(name, "firmware.bin") == 0) {
             const char* url = a["browser_download_url"] | "";
@@ -52,6 +46,16 @@ bool parse(const char* json, ReleaseInfo& out, char* err, size_t err_len) {
     }
 
     return true;
+}
+
+bool parse(const char* json, ReleaseInfo& out, char* err, size_t err_len) {
+    if (!json) { setError(err, err_len, "null json"); return false; }
+
+    JsonDocument doc;
+    DeserializationError jerr = deserializeJson(doc, json);
+    if (jerr) { setError(err, err_len, jerr.c_str()); return false; }
+
+    return parseFromDocument(doc, out, err, err_len);
 }
 
 }  // namespace github_releases_parse

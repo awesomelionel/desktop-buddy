@@ -1,6 +1,7 @@
 #include "GitHubReleases.h"
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <NetworkClientSecure.h>
 #include <string.h>
@@ -56,12 +57,20 @@ FetchResult fetchLatestRelease() {
         return r;
     }
 
-    String body = http.getString();
+    // Stream the response body directly into ArduinoJson — getString()
+    // returns empty for chunked transfer encoding on this ESP32 core
+    // version, which is how GitHub's API serves /releases/latest.
+    JsonDocument doc;
+    DeserializationError jerr = deserializeJson(doc, http.getStream());
     http.end();
+    if (jerr) {
+        setError(r, jerr.c_str());
+        return r;
+    }
 
     char perr[64] = {};
-    if (!github_releases_parse::parse(body.c_str(), r.info,
-                                       perr, sizeof(perr))) {
+    if (!github_releases_parse::parseFromDocument(doc, r.info,
+                                                   perr, sizeof(perr))) {
         setError(r, perr[0] ? perr : "parse failed");
         return r;
     }

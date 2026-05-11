@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 
+#include <ArduinoJson.h>
+
 namespace github_releases_parse {
 
 struct ReleaseInfo {
@@ -10,10 +12,15 @@ struct ReleaseInfo {
     char download_url[256];     // first asset named "firmware.bin"
 };
 
-// Parses a GitHub /releases/latest response body into `out`. Returns
-// true on success; on failure writes a short reason into `err` and
-// returns false. `out` is unspecified on failure (caller should treat
-// it as invalid).
+// Extracts the ReleaseInfo fields from an already-deserialized
+// JsonDocument. Returns true on success; on failure writes a short
+// reason into `err`.
+bool parseFromDocument(const JsonDocument& doc, ReleaseInfo& out,
+                       char* err, size_t err_len);
+
+// Parses a GitHub /releases/latest JSON string into `out`. Convenience
+// wrapper around deserializeJson + parseFromDocument. Returns true on
+// success.
 bool parse(const char* json, ReleaseInfo& out, char* err, size_t err_len);
 
 }  // namespace github_releases_parse
