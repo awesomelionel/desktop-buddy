@@ -4,6 +4,7 @@
 #include "core/AppState.h"
 #include "core/ConfigStore.h"
 #include "core/EventBus.h"
+#include "core/FactoryResetCoordinator.h"
 #include "core/Settings.h"
 #include "core/UpdateManager.h"
 #include "display/Display.h"
@@ -33,6 +34,8 @@ static ConfigStore  configStore;
 static WifiManager  wifiManager{configStore};
 static HttpServer   httpServer{wifiManager, appState, configStore, settingsStore};
 static BleLink      bleLink{appState};
+static FactoryResetCoordinator factoryReset{configStore, settingsStore,
+                                            appState.macDeviceName()};
 
 static PromptUi     promptUi = {};
 static CardController cardController{appState, eventBus, wifiManager, promptUi, bleLink,
@@ -76,6 +79,7 @@ void setup() {
     cardController.begin();
 
     UpdateManager::instance().begin();
+    factoryReset.setInputRouter(&inputRouter);
 
     // Hold center 5s to wipe Wi-Fi creds and reboot into the captive
     // portal. Useful when the network changes or the user wants to
@@ -119,6 +123,7 @@ void loop() {
     wifiManager.tick(now);
     httpServer.tick(now);
     UpdateManager::instance().tick(now);
+    factoryReset.tick(now);
     battery.tick(now);
     {
         BatteryStatus bs;
