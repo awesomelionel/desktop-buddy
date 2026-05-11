@@ -104,6 +104,13 @@ void UpdateManager::doInstallBlocking() {
     }
 
     NetworkClientSecure client;
+    // Calling setCACertBundle() with non-null bytes makes
+    // NetworkClientSecure set _use_ca_bundle=true. esp_crt_bundle_set()
+    // expects an IDF-specific binary format (not PEM), so our PEM here
+    // is technically rejected — but esp_crt_bundle_attach() falls back
+    // to the IDF-default Mozilla bundle, which covers everything we
+    // need (DigiCert, ISRG Root X1, Amazon, etc.). Switching to a
+    // generated binary bundle is future cleanup; this works today.
     const size_t bundle_size =
         (size_t)(github_certs_pem_end - github_certs_pem_start);
     client.setCACertBundle(github_certs_pem_start, bundle_size);

@@ -7,6 +7,7 @@
 #include "core/FactoryResetCoordinator.h"
 #include "core/Settings.h"
 #include "core/UpdateManager.h"
+#include "core/firmware_version.h"
 #include "display/Display.h"
 #include "hal/Battery.h"
 #include "input/InputRouter.h"
@@ -65,6 +66,8 @@ static void drawSplash() {
 void setup() {
     Serial.begin(115200);
     delay(200);
+
+    Serial.printf("\n[boot] claude-buddy firmware %s\n", FIRMWARE_VERSION);
 
     appState.initMacDeviceName();
     settingsStore.setEventBus(&eventBus);
