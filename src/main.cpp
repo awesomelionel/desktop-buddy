@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <esp_ota_ops.h>
 
 #include "core/AppState.h"
 #include "core/ConfigStore.h"
@@ -102,6 +103,11 @@ void setup() {
     httpServer.begin();
 
     appState.setBuddyState(state_derive(appState.status(), appState.isLive(millis())));
+
+    // If we got here, the current image is healthy. Acknowledge to the
+    // bootloader so it won't roll back on next power-up. Safe to call
+    // even when the running partition wasn't a fresh OTA install.
+    esp_ota_mark_app_valid_cancel_rollback();
 }
 
 void loop() {

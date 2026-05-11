@@ -538,6 +538,17 @@ void HttpServer::registerStaHandlers() {
         server_->send(200, "application/json", buildUpdateStatusJson());
     });
 
+    // ---- /api/install-update (async; runs the install from the next tick)
+    server_->on("/api/install-update", HTTP_POST, [this]() {
+        auto& um = UpdateManager::instance();
+        if (um.status().state != UpdateManager::State::UpdateAvailable) {
+            sendJsonError(server_, 409, "no update available");
+            return;
+        }
+        um.requestInstall();
+        server_->send(200, "application/json", "{\"state\":\"downloading\"}");
+    });
+
     // ---- /api/status (kept under /api/* now)
     server_->on("/api/status", HTTP_GET, [this]() {
         const ClaudeStatus& s = app_.status();
