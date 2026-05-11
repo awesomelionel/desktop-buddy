@@ -8,6 +8,7 @@
 #include "../core/AppState.h"
 #include "../core/ConfigStore.h"
 #include "../core/Settings.h"
+#include "../core/UpdateManager.h"
 #include "../core/firmware_version.h"
 #include "WifiManager.h"
 
@@ -50,6 +51,36 @@ void sendJsonError(WebServer* s, int code, const char* msg) {
 
 void sendJsonOk(WebServer* s) {
     s->send(200, "application/json", "{\"ok\":true}");
+}
+
+const char* updateStateName(UpdateManager::State s) {
+    switch (s) {
+        case UpdateManager::State::Idle:            return "idle";
+        case UpdateManager::State::Checking:        return "checking";
+        case UpdateManager::State::UpToDate:        return "up_to_date";
+        case UpdateManager::State::UpdateAvailable: return "update_available";
+        case UpdateManager::State::Downloading:     return "downloading";
+        case UpdateManager::State::InstallReady:    return "install_ready";
+        case UpdateManager::State::Failed:          return "failed";
+    }
+    return "unknown";
+}
+
+String buildUpdateStatusJson() {
+    auto& um  = UpdateManager::instance();
+    auto  st  = um.status();
+    auto* rel = um.latestRelease();
+    String out;
+    out.reserve(256 + (rel ? strlen(rel->body) : 0));
+    out += "{\"state\":";            appendJsonString(out, updateStateName(st.state));
+    out += ",\"current\":";          appendJsonString(out, um.currentVersion());
+    out += ",\"latest\":";           appendJsonString(out, rel ? rel->tag : "");
+    out += ",\"notes\":";            appendJsonString(out, rel ? rel->body : "");
+    out += ",\"bytes_received\":";   out += String(st.bytes_received);
+    out += ",\"bytes_total\":";      out += String(st.bytes_total);
+    out += ",\"error\":";            appendJsonString(out, st.last_error);
+    out += '}';
+    return out;
 }
 
 // Build the /api/networks JSON. Triggers a scan if none has run yet.
@@ -490,6 +521,21 @@ void HttpServer::registerStaHandlers() {
         appendJsonString(out, FIRMWARE_VERSION);
         out += '}';
         server_->send(200, "application/json", out);
+    });
+
+    // ---- /api/check-for-updates (synchronous; fetches GitHub Releases)
+    server_->on("/api/check-for-updates", HTTP_POST, [this]() {
+        if (!wifi_.isConnected()) {
+            sendJsonError(server_, 503, "offline");
+            return;
+        }
+        UpdateManager::instance().requestCheck();
+        server_->send(200, "application/json", buildUpdateStatusJson());
+    });
+
+    // ---- /api/update-status
+    server_->on("/api/update-status", HTTP_GET, [this]() {
+        server_->send(200, "application/json", buildUpdateStatusJson());
     });
 
     // ---- /api/status (kept under /api/* now)

@@ -49,5 +49,16 @@ curl -fsS -X POST "$BASE/api/settings/cards" \
 step "GET /api/settings (verify changes stuck)"
 curl -fsS "$BASE/api/settings" | jq .
 
+step "GET /api/update-status (expect idle)"
+RESP=$(curl -fsS "$BASE/api/update-status")
+echo "$RESP" | jq .
+echo "$RESP" | grep -q '"state":"idle"' || { echo "FAIL: state not idle"; exit 1; }
+
+step "POST /api/check-for-updates (expect up_to_date, update_available, or failed)"
+RESP=$(curl -fsS -X POST "$BASE/api/check-for-updates")
+echo "$RESP" | jq .
+echo "$RESP" | grep -qE '"state":"(up_to_date|update_available|failed)"' \
+    || { echo "FAIL: unexpected state"; exit 1; }
+
 step "Done. Skipped: /api/actions/{reboot,reset-settings,forget-wifi} —"
 step "those reboot the device. Run them manually to verify."
