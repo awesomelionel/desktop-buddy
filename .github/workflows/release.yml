@@ -1,0 +1,62 @@
+name: Release firmware
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write   # for uploading the asset
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: ${{ runner.os }}-platformio-${{ hashFiles('platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+
+      - name: Extract version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build firmware
+        env:
+          PLATFORMIO_BUILD_FLAGS: -DFW_VERSION='"${{ steps.ver.outputs.version }}"'
+        run: pio run -e adafruit_feather_esp32s3_reversetft
+
+      - name: Copy artifact
+        run: cp .pio/build/adafruit_feather_esp32s3_reversetft/firmware.bin .
+
+      - name: Upload firmware.bin to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Wait for the release to exist (the developer creates it
+          # manually, then pushes the tag — or it may already exist).
+          for i in 1 2 3 4 5; do
+            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+              break
+            fi
+            echo "Release $GITHUB_REF_NAME not found yet, retry $i/5..."
+            sleep 6
+          done
+          gh release upload "$GITHUB_REF_NAME" firmware.bin --clobber
