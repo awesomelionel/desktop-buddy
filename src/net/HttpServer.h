@@ -8,6 +8,7 @@ class WifiManager;
 class ConfigStore;
 class AppState;
 class Settings;
+class FactoryResetCoordinator;
 
 // HTTP server with two roles, same WebServer instance:
 //   STA mode → JSON API (start with GET /status)
@@ -19,7 +20,7 @@ class Settings;
 class HttpServer {
 public:
     HttpServer(WifiManager& wifi, const AppState& app, ConfigStore& config,
-               Settings& settings);
+               Settings& settings, FactoryResetCoordinator& fr);
     ~HttpServer();
 
     void begin();
@@ -34,10 +35,11 @@ private:
     void registerApHandlers();
 
     enum class Role { NONE, STA, AP };
-    WifiManager&    wifi_;
-    const AppState& app_;
-    ConfigStore&    config_;
-    Settings&       settings_;
+    WifiManager&             wifi_;
+    const AppState&          app_;
+    ConfigStore&             config_;
+    Settings&                settings_;
+    FactoryResetCoordinator& fr_;
 
     WebServer*  server_;
     DNSServer*  dns_;

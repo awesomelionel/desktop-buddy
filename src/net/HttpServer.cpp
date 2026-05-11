@@ -7,6 +7,7 @@
 
 #include "../core/AppState.h"
 #include "../core/ConfigStore.h"
+#include "../core/FactoryResetCoordinator.h"
 #include "../core/Settings.h"
 #include "../core/UpdateManager.h"
 #include "../core/firmware_version.h"
@@ -131,8 +132,9 @@ void handleSaveNetwork(WebServer* s, ConfigStore& cfg) {
 }  // namespace
 
 HttpServer::HttpServer(WifiManager& wifi, const AppState& app,
-                       ConfigStore& config, Settings& settings)
-    : wifi_(wifi), app_(app), config_(config), settings_(settings),
+                       ConfigStore& config, Settings& settings,
+                       FactoryResetCoordinator& fr)
+    : wifi_(wifi), app_(app), config_(config), settings_(settings), fr_(fr),
       server_(nullptr), dns_(nullptr), role_(Role::NONE), boot_ms_(0) {}
 
 HttpServer::~HttpServer() {
@@ -374,6 +376,10 @@ void HttpServer::registerStaHandlers() {
               "<pre id=install-progress hidden style='background:#FAFAF7;"
                 "border-radius:6px;padding:.6rem .8rem;font-size:.9rem;"
                 "white-space:pre-wrap;word-break:break-word'></pre>"
+              "<hr style='margin:1rem 0;border:none;border-top:1px solid var(--border)'>"
+              "<button class=danger type=button id=btn-factory-reset>"
+                "Factory reset</button>"
+              "<p id=reset-hint class=status-msg></p>"
             "</div>"
 
             // -------- DANGER --------
@@ -595,6 +601,18 @@ void HttpServer::registerStaHandlers() {
               "}"
             "}"
 
+            "$('btn-factory-reset').onclick=async()=>{"
+              "if(!confirm('Factory reset wipes Wi-Fi and all settings. Continue?'))return;"
+              "try{"
+                "await fetch('/api/factory-reset',{method:'POST'});"
+                "setMsg($('reset-hint'),"
+                  "'Go to the device and hold the center button for 3 seconds '+"
+                  "'to confirm. (Auto-cancels in 30 s.)','ok')"
+              "}catch(e){"
+                "setMsg($('reset-hint'),'Network error: '+e.message,'err')"
+              "}"
+            "};"
+
             "loadFwVersion();"
             "loadSettings();loadNets();pollStatus();setInterval(pollStatus,3000);"
             "</script>");
@@ -622,6 +640,13 @@ void HttpServer::registerStaHandlers() {
     // ---- /api/update-status
     server_->on("/api/update-status", HTTP_GET, [this]() {
         server_->send(200, "application/json", buildUpdateStatusJson());
+    });
+
+    // ---- /api/factory-reset (arms the coordinator; user must hold center button)
+    server_->on("/api/factory-reset", HTTP_POST, [this]() {
+        fr_.arm(millis());
+        server_->send(200, "application/json",
+            "{\"state\":\"awaiting_hold\",\"timeout_s\":30}");
     });
 
     // ---- /api/install-update (async; runs the install from the next tick)

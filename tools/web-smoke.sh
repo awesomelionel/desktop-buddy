@@ -60,5 +60,13 @@ echo "$RESP" | jq .
 echo "$RESP" | grep -qE '"state":"(up_to_date|update_available|failed)"' \
     || { echo "FAIL: unexpected state"; exit 1; }
 
+step "POST /api/factory-reset (arm only; do NOT hold center)"
+RESP=$(curl -fsS -X POST "$BASE/api/factory-reset")
+echo "$RESP" | jq .
+echo "$RESP" | grep -q '"state":"awaiting_hold"' \
+    || { echo "FAIL: factory-reset did not arm"; exit 1; }
+echo "  waiting 32s for arm window to lapse..."
+sleep 32
+
 step "Done. Skipped: /api/actions/{reboot,reset-settings,forget-wifi} —"
 step "those reboot the device. Run them manually to verify."

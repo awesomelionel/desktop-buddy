@@ -32,10 +32,11 @@ static EventBus     eventBus;
 static Settings     settingsStore;  // class Settings (the wrapper); the lowercase 'settings' namespace lives in lib/settings, so we name the global differently to avoid a token clash.
 static ConfigStore  configStore;
 static WifiManager  wifiManager{configStore};
-static HttpServer   httpServer{wifiManager, appState, configStore, settingsStore};
 static BleLink      bleLink{appState};
 static FactoryResetCoordinator factoryReset{configStore, settingsStore,
                                             appState.macDeviceName()};
+static HttpServer   httpServer{wifiManager, appState, configStore, settingsStore,
+                               factoryReset};
 
 static PromptUi     promptUi = {};
 static CardController cardController{appState, eventBus, wifiManager, promptUi, bleLink,
