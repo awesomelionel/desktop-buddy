@@ -6,14 +6,14 @@
 namespace bus_arrivals {
 
 constexpr uint8_t  kMaxServicesPerStop = 16;
-constexpr uint8_t  kServiceNoLen       = 4;     // "961M\0" needs 5 bytes
+constexpr uint8_t  kServiceNoLen       = 5;     // "961MX\0" needs 6 bytes
 constexpr size_t   kMaxResponseBytes   = 32 * 1024;
 
 enum BusLoad : uint8_t { LOAD_UNKNOWN = 0, LOAD_SEA, LOAD_SDA, LOAD_LSD };
 enum BusType : uint8_t { TYPE_UNKNOWN = 0, TYPE_SD,  TYPE_DD,  TYPE_BD  };
 
 struct BusServiceArrival {
-    char    service_no[kServiceNoLen + 1];   // up to "961M\0"
+    char    service_no[kServiceNoLen + 1];   // up to "961MX\0"
     int32_t eta_seconds_at_fetch;            // INT32_MIN sentinel = no data
     BusLoad load;
     BusType type;

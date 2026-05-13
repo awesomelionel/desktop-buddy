@@ -17,8 +17,11 @@ constexpr int kRowH        = 16;
 constexpr int kBodyW       = 240;
 constexpr int kBodyH       = 135 - kBodyTopY;
 
+// Size-2 font is 10 px per char; a 5-char ServiceNo at kCol_Service=8 ends
+// at x=58. Push the dot past that with a small gap so the longest service
+// numbers don't bump into the load indicator.
 constexpr int kCol_Service = 8;
-constexpr int kCol_Dot     = 50;
+constexpr int kCol_Dot     = 72;
 constexpr int kCol_Eta     = 110;
 constexpr int kEtaW        = 80;
 constexpr int kCol_Type    = 200;
