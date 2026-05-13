@@ -70,64 +70,26 @@ bool BusArrivalsFetcher::fetch(const char* code, uint32_t now_ms,
         return false;
     }
 
-    // Read into a heap buffer with a hard cap. We can't stream-parse and
-    // also enforce the size cap with the chunked path cleanly, so we
-    // accumulate into a bounded buffer. Prefer PSRAM (ESP32-S3 has 8 MB)
-    // since internal SRAM is fragmented after Wi-Fi+TLS init and a 32 KB
-    // contiguous request often fails there.
-    size_t cap = (body_len > 0)
-        ? (size_t)body_len + 1
-        : bus_arrivals::kMaxResponseBytes + 1;
-    if (cap > bus_arrivals::kMaxResponseBytes + 1) {
-        cap = bus_arrivals::kMaxResponseBytes + 1;
-    }
-    char* buf = (char*)ps_malloc(cap);
-    bool from_psram = (buf != nullptr);
-    if (!buf) buf = (char*)malloc(cap);
-    Serial.printf("[bus] alloc %u bytes from %s -> %s\n",
-                  (unsigned)cap,
-                  from_psram ? "psram" : (buf ? "heap" : "(failed)"),
-                  buf ? "ok" : "OOM");
-    if (!buf) {
-        setErr(out, "oom");
-        http.end();
-        return false;
-    }
-
-    NetworkClient& stream = http.getStream();
-    size_t pos = 0;
-    uint32_t deadline = millis() + kHttpTimeoutMs;
-    while (http.connected() && pos + 1 < cap && (int32_t)(deadline - millis()) > 0) {
-        int avail = stream.available();
-        if (avail > 0) {
-            size_t want = (size_t)avail;
-            if (want > cap - 1 - pos) want = cap - 1 - pos;
-            int got = stream.readBytes(buf + pos, want);
-            if (got <= 0) break;
-            pos += (size_t)got;
-            if (pos >= bus_arrivals::kMaxResponseBytes) {
-                setErr(out, "response too large");
-                free(buf);
-                http.end();
-                return false;
-            }
-        } else {
-            delay(2);
-        }
-        if (body_len > 0 && (int)pos >= body_len) break;
-    }
-    buf[pos] = '\0';
+    // Let HTTPClient handle chunked decoding and dynamic body sizing. A
+    // single-stop response is ~2-3 KB, so the resulting String stays small;
+    // pre-allocating a worst-case 32 KB buffer up front fails once TLS
+    // scratch buffers have fragmented internal heap below that contiguous
+    // size (which is exactly what we observed on device).
+    String body = http.getString();
     http.end();
+    size_t pos = body.length();
+    Serial.printf("[bus] read %u bytes\n", (unsigned)pos);
 
     if (pos == 0) {
         setErr(out, "empty body");
-        free(buf);
+        return false;
+    }
+    if (pos > bus_arrivals::kMaxResponseBytes) {
+        setErr(out, "response too large");
         return false;
     }
 
-    Serial.printf("[bus] read %u bytes\n", (unsigned)pos);
-    bool ok = bus_arrivals::parseBusArrivalsJson(buf, pos, out);
-    free(buf);
+    bool ok = bus_arrivals::parseBusArrivalsJson(body.c_str(), pos, out);
     if (!ok) {
         Serial.printf("[bus] parse failed: %s\n", out.last_error);
         return false;
