@@ -382,6 +382,10 @@ const char* cardName(CardId id) {
         case CARD_EYES:    return "Eyes";
         case CARD_WIFI:    return "Wifi";
         case CARD_NAVTEST: return "NavTest";
+        case CARD_BUS_1:   return "Bus 1";
+        case CARD_BUS_2:   return "Bus 2";
+        case CARD_BUS_3:   return "Bus 3";
+        case CARD_BUS_4:   return "Bus 4";
         case CARD_COUNT:   return "?";
     }
     return "?";
@@ -442,7 +446,23 @@ size_t toJson(const Settings& s, char* buf, size_t buf_len) {
         pos += (size_t)n;
     }
 
-    int n = snprintf(buf + pos, buf_len - pos, "]}");
+    int n = snprintf(buf + pos, buf_len - pos, "],\"bus_stops\":[");
+    if (n < 0 || (size_t)n >= buf_len - pos) return 0;
+    pos += (size_t)n;
+
+    for (uint8_t i = 0; i < MAX_BUS_STOPS; ++i) {
+        const char* sep_b = (i == 0) ? "" : ",";
+        n = snprintf(buf + pos, buf_len - pos,
+            "%s{\"slot\":%u,\"code\":\"%s\",\"label\":\"%s\"}",
+            sep_b,
+            (unsigned)i,
+            s.bus_stops[i].code,
+            s.bus_stops[i].label);
+        if (n < 0 || (size_t)n >= buf_len - pos) return 0;
+        pos += (size_t)n;
+    }
+
+    n = snprintf(buf + pos, buf_len - pos, "]}");
     if (n < 0 || (size_t)n >= buf_len - pos) return 0;
     pos += (size_t)n;
     return pos;

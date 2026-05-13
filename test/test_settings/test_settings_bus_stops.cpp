@@ -126,3 +126,30 @@ void test_apply_bus_stop_clear_when_only_bus_card_enabled_rejected(void) {
                             s.cards_enabled_mask);
     TEST_ASSERT_TRUE(strstr(err, "enabled") != nullptr);
 }
+
+void test_tojson_includes_bus_stops_array(void) {
+    Settings s = make_defaults_bus();
+    char err[64] = {};
+    TEST_ASSERT_TRUE(applyBusStopField(s, 0, "50171", "Home",
+                                       err, sizeof(err)));
+    TEST_ASSERT_TRUE(applyBusStopField(s, 2, "54321", "",
+                                       err, sizeof(err)));
+    char buf[2048] = {};
+    size_t n = toJson(s, buf, sizeof(buf));
+    TEST_ASSERT_NOT_EQUAL(0, n);
+    TEST_ASSERT_TRUE(strstr(buf, "\"bus_stops\":[") != nullptr);
+    TEST_ASSERT_TRUE(strstr(buf, "\"slot\":0") != nullptr);
+    TEST_ASSERT_TRUE(strstr(buf, "\"code\":\"50171\"") != nullptr);
+    TEST_ASSERT_TRUE(strstr(buf, "\"label\":\"Home\"") != nullptr);
+    TEST_ASSERT_TRUE(strstr(buf, "\"code\":\"54321\"") != nullptr);
+    TEST_ASSERT_TRUE(strstr(buf, "\"slot\":3") != nullptr);  // empty slot still emitted
+}
+
+void test_tojson_includes_bus_card_names(void) {
+    Settings s = make_defaults_bus();
+    char buf[2048] = {};
+    size_t n = toJson(s, buf, sizeof(buf));
+    TEST_ASSERT_NOT_EQUAL(0, n);
+    TEST_ASSERT_TRUE(strstr(buf, "\"name\":\"Bus 1\"") != nullptr);
+    TEST_ASSERT_TRUE(strstr(buf, "\"name\":\"Bus 4\"") != nullptr);
+}
