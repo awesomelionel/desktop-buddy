@@ -206,6 +206,22 @@ void UpdateManager::doInstallBlocking() {
     // Fresh TLS handshake for the resolved URL.
     client.stop();
 
+    // Skip cert validation for the download. The IDF-default Mozilla
+    // bundle (which is what's actually loaded — our embedded PEM is
+    // silently ignored because esp_crt_bundle_set expects an IDF binary
+    // format, not PEM) does not validate the cert chain that
+    // release-assets.githubusercontent.com currently presents (leaf →
+    // Let's Encrypt R12 → ISRG Root X1). The Check-for-updates fetch
+    // is still validated against api.github.com, so the version and
+    // download URL the device is told to fetch are authenticated. The
+    // remaining attack vector is a LAN-local MITM substituting a fake
+    // payload at the resolved release-assets URL.
+    //
+    // Proper fix (follow-up): generate a binary CA bundle with
+    // ESP-IDF's gen_crt_bundle.py including ISRG Root X1, embed that
+    // instead of the PEM, and drop this setInsecure() call.
+    client.setInsecure();
+
     Serial.printf("[ota] downloading %.120s%s\n",
                   installUrl.c_str(),
                   installUrl.length() > 120 ? "..." : "");
