@@ -24,7 +24,7 @@ constexpr int kCol_Service = 8;
 constexpr int kCol_Dot     = 72;
 constexpr int kCol_Eta     = 110;
 constexpr int kEtaW        = 80;
-constexpr int kCol_Type    = 200;
+constexpr int kCol_Type    = 210;   // size-2 "DD" is 20 px wide; ends at x=230, before scroll bar at x=234
 
 constexpr int kScrollX     = 234;
 constexpr int kScrollW     = 4;
@@ -73,10 +73,10 @@ uint16_t typeColor(bus_arrivals::BusType t) {
 
 const char* typeLabel(bus_arrivals::BusType t) {
     switch (t) {
-        case bus_arrivals::TYPE_DD: return "[DD]";
-        case bus_arrivals::TYPE_SD: return "[SD]";
-        case bus_arrivals::TYPE_BD: return "[BD]";
-        default:                    return "[--]";
+        case bus_arrivals::TYPE_DD: return "DD";
+        case bus_arrivals::TYPE_SD: return "SD";
+        case bus_arrivals::TYPE_BD: return "BD";
+        default:                    return "--";
     }
 }
 
@@ -311,10 +311,11 @@ void BusCard::renderRows(Adafruit_ST7789& tft, uint32_t now_ms) {
             // no text label needed.
             tft.fillCircle(kCol_Dot + 5, row_y + 7, 5, loadColor(svc.load));
 
-            // Type tag.
-            tft.setTextSize(1);
+            // Type tag — size 2 to match the service number / ETA. The
+            // size-1 version was hard to read at arm's length.
+            tft.setTextSize(2);
             tft.setTextColor(stale ? kColDim : typeColor(svc.type), kColBg);
-            tft.setCursor(kCol_Type, row_y + 4);
+            tft.setCursor(kCol_Type, row_y);
             tft.print(typeLabel(svc.type));
 
             last_drawn_[i] = svc;
