@@ -1,0 +1,10 @@
+{
+  "name": "bus_arrivals",
+  "version": "0.1.0",
+  "description": "Pure-C++ parser for api.busaunty.com bus arrival JSON.",
+  "frameworks": "*",
+  "platforms": "*",
+  "dependencies": [
+    {"name": "ArduinoJson", "version": "^7.0.0"}
+  ]
+}
