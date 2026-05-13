@@ -46,6 +46,13 @@ public:
     bool applyDailyCap(uint32_t daily_token_cap,
                        char* err, size_t err_len);
 
+    // Applies a per-slot bus-stop update. Returns true on success;
+    // on failure, err is populated and in-memory state is unchanged.
+    bool applyBusStop(uint8_t slot,
+                      const char* code,
+                      const char* label,
+                      char* err, size_t err_len);
+
     // Wipe NVS settings namespace and reset to defaults seeded with
     // default_name. Wi-Fi creds (in a separate namespace) are untouched.
     void clearToDefaults(const char* default_name);
