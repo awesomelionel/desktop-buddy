@@ -13,7 +13,10 @@ constexpr int kHeaderY     = 0;
 constexpr int kHeaderH     = 14;
 constexpr int kDividerY    = 14;
 constexpr int kBodyTopY    = 18;
-constexpr int kRowH        = 16;
+// 6 rows × 19 px pitch fills 114 px of the 117 px body, leaving 3 px at
+// the bottom. Each row exceeds the 16 px size-2 character height by 3 px,
+// giving ~1 px above and 2 px below for visual breathing room.
+constexpr int kRowH        = 19;
 constexpr int kBodyW       = 240;
 constexpr int kBodyH       = 135 - kBodyTopY;
 
@@ -297,6 +300,10 @@ void BusCard::renderRows(Adafruit_ST7789& tft, uint32_t now_ms) {
 
         bool minute_changed = minute != last_drawn_minute_[i];
 
+        // Size-2 text (16 px tall) inside a 19 px row needs +1 px y offset
+        // to leave roughly equal padding above and below.
+        const int text_y = row_y + 1;
+
         if (row_changed) {
             // Repaint the whole row band.
             tft.fillRect(0, row_y, kBodyW - kScrollW - 4, kRowH, kColBg);
@@ -304,18 +311,18 @@ void BusCard::renderRows(Adafruit_ST7789& tft, uint32_t now_ms) {
             // Service number — size 2.
             tft.setTextSize(2);
             tft.setTextColor(fg, kColBg);
-            tft.setCursor(kCol_Service, row_y);
+            tft.setCursor(kCol_Service, text_y);
             tft.print(svc.service_no);
 
             // Load dot — colour conveys the SEA/SDA/LSD meaning on its own;
             // no text label needed.
-            tft.fillCircle(kCol_Dot + 5, row_y + 7, 5, loadColor(svc.load));
+            tft.fillCircle(kCol_Dot + 5, row_y + 9, 5, loadColor(svc.load));
 
             // Type tag — size 2 to match the service number / ETA. The
             // size-1 version was hard to read at arm's length.
             tft.setTextSize(2);
             tft.setTextColor(stale ? kColDim : typeColor(svc.type), kColBg);
-            tft.setCursor(kCol_Type, row_y);
+            tft.setCursor(kCol_Type, text_y);
             tft.print(typeLabel(svc.type));
 
             last_drawn_[i] = svc;
@@ -327,21 +334,21 @@ void BusCard::renderRows(Adafruit_ST7789& tft, uint32_t now_ms) {
             tft.setTextSize(2);
             if (minute == INT32_MIN) {
                 tft.setTextColor(kColDim, kColBg);
-                tft.setCursor(kCol_Eta, row_y);
+                tft.setCursor(kCol_Eta, text_y);
                 tft.print("--");
             } else if (minute <= 0) {
                 tft.setTextColor(kColEtaArr, kColBg);
-                tft.setCursor(kCol_Eta, row_y);
+                tft.setCursor(kCol_Eta, text_y);
                 tft.print("Arr");
             } else if (minute >= 60) {
                 tft.setTextColor(kColDim, kColBg);
-                tft.setCursor(kCol_Eta, row_y);
+                tft.setCursor(kCol_Eta, text_y);
                 tft.print("60+");
             } else {
                 tft.setTextColor(fg, kColBg);
                 char m[8];
                 snprintf(m, sizeof(m), "%dm", minute);
-                tft.setCursor(kCol_Eta, row_y);
+                tft.setCursor(kCol_Eta, text_y);
                 tft.print(m);
             }
             last_drawn_minute_[i] = minute;

@@ -23,7 +23,7 @@ public:
     void onShow() override;
     void onHide() override;
 
-    static constexpr uint8_t  kViewportRows  = 7;
+    static constexpr uint8_t  kViewportRows  = 6;
     static constexpr uint32_t kFetchPeriodMs = 30000;
     static constexpr uint32_t kStaleAfterMs  = 90000;
     static constexpr uint32_t kHintShowMs    = 3000;
