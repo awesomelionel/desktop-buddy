@@ -20,6 +20,48 @@ bool isPrintableAscii(char c) {
     return u >= 32 && u <= 126;
 }
 
+bool isAsciiDigit(char c) {
+    unsigned char u = static_cast<unsigned char>(c);
+    return u >= '0' && u <= '9';
+}
+
+bool isValidBusStopCode(const char* code, char* error, size_t error_len) {
+    if (!code) { writeError(error, error_len, "bus_stops code missing"); return false; }
+    size_t n = strlen(code);
+    if (n == 0) return true;
+    if (n != BUS_STOP_CODE_LEN) {
+        writeError(error, error_len, "bus_stops code must be 5 digits or empty");
+        return false;
+    }
+    for (size_t i = 0; i < n; ++i) {
+        if (!isAsciiDigit(code[i])) {
+            writeError(error, error_len, "bus_stops code must be 5 digits or empty");
+            return false;
+        }
+    }
+    return true;
+}
+
+bool isValidBusStopLabel(const char* label, char* error, size_t error_len) {
+    if (!label) { writeError(error, error_len, "bus_stops label missing"); return false; }
+    size_t n = strlen(label);
+    if (n > MAX_BUS_LABEL_LEN) {
+        writeError(error, error_len, "bus_stops label too long (max 12)");
+        return false;
+    }
+    for (size_t i = 0; i < n; ++i) {
+        if (!isPrintableAscii(label[i])) {
+            writeError(error, error_len, "bus_stops label has non-printable chars");
+            return false;
+        }
+    }
+    return true;
+}
+
+uint8_t busSlotForCardId(uint8_t id) {
+    return (uint8_t)(id - CARD_BUS_1);
+}
+
 bool isValidDeviceName(const char* name, char* error, size_t error_len) {
     if (!name) { writeError(error, error_len, "name missing"); return false; }
     size_t n = strlen(name);
@@ -166,6 +208,10 @@ void setDefaults(Settings& s, const char* default_name) {
     s.cards_order[3]    = 0;
     s.cards_order_count = 3;
     s.boot_card_id      = CARD_STATUS;
+    for (uint8_t i = 0; i < MAX_BUS_STOPS; ++i) {
+        s.bus_stops[i].code[0]  = '\0';
+        s.bus_stops[i].label[0] = '\0';
+    }
 }
 
 bool validate(const Settings& s, char* error, size_t error_len) {
@@ -187,6 +233,17 @@ bool validate(const Settings& s, char* error, size_t error_len) {
     if ((s.cards_enabled_mask & (1u << s.boot_card_id)) == 0) {
         writeError(error, error_len, "boot_card_id is not enabled");
         return false;
+    }
+    for (uint8_t i = 0; i < MAX_BUS_STOPS; ++i) {
+        if (!isValidBusStopCode(s.bus_stops[i].code,   error, error_len)) return false;
+        if (!isValidBusStopLabel(s.bus_stops[i].label, error, error_len)) return false;
+    }
+    for (uint8_t id = CARD_BUS_1; id <= CARD_BUS_4; ++id) {
+        if ((s.cards_enabled_mask & (1u << id)) == 0) continue;
+        if (s.bus_stops[busSlotForCardId(id)].code[0] == '\0') {
+            writeError(error, error_len, "bus card enabled with empty code");
+            return false;
+        }
     }
     return true;
 }
@@ -259,6 +316,55 @@ bool applyDailyCapField(Settings& s,
                         char* error, size_t error_len) {
     if (!isValidDailyTokenCap(daily_token_cap, error, error_len)) return false;
     s.daily_token_cap = daily_token_cap;
+    return true;
+}
+
+bool applyBusStopField(Settings& s,
+                       uint8_t slot,
+                       const char* code,
+                       const char* label,
+                       char* error, size_t error_len) {
+    if (slot >= MAX_BUS_STOPS) {
+        writeError(error, error_len, "bus_stops slot out of range");
+        return false;
+    }
+    if (!isValidBusStopCode(code,   error, error_len)) return false;
+    const bool clearing = (code[0] == '\0');
+    if (!clearing) {
+        if (!isValidBusStopLabel(label, error, error_len)) return false;
+    }
+
+    if (clearing) {
+        s.bus_stops[slot].code[0]  = '\0';
+        s.bus_stops[slot].label[0] = '\0';
+        const uint8_t card_id = (uint8_t)(CARD_BUS_1 + slot);
+        if (s.cards_enabled_mask & (1u << card_id)) {
+            s.cards_enabled_mask &= (uint8_t)~(1u << card_id);
+            uint8_t out = 0;
+            for (uint8_t i = 0; i < s.cards_order_count; ++i) {
+                if (s.cards_order[i] != card_id) {
+                    s.cards_order[out++] = s.cards_order[i];
+                }
+            }
+            for (uint8_t i = out; i < CARD_COUNT; ++i) s.cards_order[i] = 0;
+            s.cards_order_count = out;
+            if (s.boot_card_id == card_id) {
+                for (uint8_t i = 0; i < CARD_COUNT; ++i) {
+                    if (s.cards_enabled_mask & (1u << i)) {
+                        s.boot_card_id = i;
+                        break;
+                    }
+                }
+            }
+        }
+    } else {
+        size_t n = strlen(code);
+        memcpy(s.bus_stops[slot].code, code, n);
+        s.bus_stops[slot].code[n] = '\0';
+        size_t m = strlen(label);
+        memcpy(s.bus_stops[slot].label, label, m);
+        s.bus_stops[slot].label[m] = '\0';
+    }
     return true;
 }
 

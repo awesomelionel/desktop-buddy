@@ -32,6 +32,19 @@ void test_apply_daily_cap_ok(void);
 void test_apply_daily_cap_rejects_over_max(void);
 void test_tojson_includes_daily_cap(void);
 
+// Defined in test_settings_bus_stops.cpp
+void test_bus_stops_default_all_empty(void);
+void test_apply_bus_stop_valid_code_accepted(void);
+void test_apply_bus_stop_empty_code_clears_slot_and_label(void);
+void test_apply_bus_stop_empty_code_clears_card_mask_bit(void);
+void test_apply_bus_stop_non_digit_rejected(void);
+void test_apply_bus_stop_wrong_length_rejected(void);
+void test_apply_bus_stop_label_too_long_rejected(void);
+void test_apply_bus_stop_label_with_control_char_rejected(void);
+void test_apply_bus_stop_slot_out_of_range_rejected(void);
+void test_validate_accepts_default_settings(void);
+void test_validate_rejects_card_enabled_with_empty_code(void);
+
 using namespace settings;
 
 void setUp(void) {}
@@ -157,7 +170,7 @@ static void test_apply_cards_happy_path(void) {
 
 static void test_to_json_contains_expected_keys(void) {
     Settings s = defaults();
-    char buf[512];
+    char buf[2048];
     size_t n = toJson(s, buf, sizeof(buf));
     TEST_ASSERT_GREATER_THAN(0, n);
     TEST_ASSERT_TRUE(strstr(buf, "\"device_name\":\"Claude-AABB\"") != nullptr);
@@ -220,5 +233,16 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_apply_daily_cap_ok);
     RUN_TEST(test_apply_daily_cap_rejects_over_max);
     RUN_TEST(test_tojson_includes_daily_cap);
+    RUN_TEST(test_bus_stops_default_all_empty);
+    RUN_TEST(test_apply_bus_stop_valid_code_accepted);
+    RUN_TEST(test_apply_bus_stop_empty_code_clears_slot_and_label);
+    RUN_TEST(test_apply_bus_stop_empty_code_clears_card_mask_bit);
+    RUN_TEST(test_apply_bus_stop_non_digit_rejected);
+    RUN_TEST(test_apply_bus_stop_wrong_length_rejected);
+    RUN_TEST(test_apply_bus_stop_label_too_long_rejected);
+    RUN_TEST(test_apply_bus_stop_label_with_control_char_rejected);
+    RUN_TEST(test_apply_bus_stop_slot_out_of_range_rejected);
+    RUN_TEST(test_validate_accepts_default_settings);
+    RUN_TEST(test_validate_rejects_card_enabled_with_empty_code);
     return UNITY_END();
 }
