@@ -19,7 +19,6 @@ constexpr int kBodyH       = 135 - kBodyTopY;
 
 constexpr int kCol_Service = 8;
 constexpr int kCol_Dot     = 50;
-constexpr int kCol_Load    = 64;
 constexpr int kCol_Eta     = 110;
 constexpr int kEtaW        = 80;
 constexpr int kCol_Type    = 200;
@@ -57,15 +56,6 @@ uint16_t loadColor(bus_arrivals::BusLoad l) {
         case bus_arrivals::LOAD_SDA: return kColLoadSDA;
         case bus_arrivals::LOAD_LSD: return kColLoadLSD;
         default:                     return kColDim;
-    }
-}
-
-const char* loadLabel(bus_arrivals::BusLoad l) {
-    switch (l) {
-        case bus_arrivals::LOAD_SEA: return "SEA";
-        case bus_arrivals::LOAD_SDA: return "SDA";
-        case bus_arrivals::LOAD_LSD: return "LSD";
-        default:                     return "---";
     }
 }
 
@@ -314,16 +304,12 @@ void BusCard::renderRows(Adafruit_ST7789& tft, uint32_t now_ms) {
             tft.setCursor(kCol_Service, row_y);
             tft.print(svc.service_no);
 
-            // Load dot.
+            // Load dot — colour conveys the SEA/SDA/LSD meaning on its own;
+            // no text label needed.
             tft.fillCircle(kCol_Dot + 5, row_y + 7, 5, loadColor(svc.load));
 
-            // Load text.
-            tft.setTextSize(1);
-            tft.setTextColor(stale ? kColDim : loadColor(svc.load), kColBg);
-            tft.setCursor(kCol_Load, row_y + 4);
-            tft.print(loadLabel(svc.load));
-
             // Type tag.
+            tft.setTextSize(1);
             tft.setTextColor(stale ? kColDim : typeColor(svc.type), kColBg);
             tft.setCursor(kCol_Type, row_y + 4);
             tft.print(typeLabel(svc.type));
