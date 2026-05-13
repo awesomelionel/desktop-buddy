@@ -27,6 +27,13 @@ bool BusArrivalsFetcher::fetch(const char* code, uint32_t now_ms,
         return false;
     }
 
+    Serial.printf("[bus] fetch start code=%s heap_free=%u psram_free=%u "
+                  "heap_largest=%u\n",
+                  code,
+                  (unsigned)ESP.getFreeHeap(),
+                  (unsigned)ESP.getFreePsram(),
+                  (unsigned)ESP.getMaxAllocHeap());
+
     NetworkClientSecure client;
     client.setInsecure();   // public, unauthenticated data
 
@@ -38,6 +45,7 @@ bool BusArrivalsFetcher::fetch(const char* code, uint32_t now_ms,
     HTTPClient http;
     http.setTimeout(kHttpTimeoutMs);
     if (!http.begin(client, url)) {
+        Serial.println("[bus] http begin failed");
         setErr(out, "http begin failed");
         return false;
     }
@@ -45,6 +53,7 @@ bool BusArrivalsFetcher::fetch(const char* code, uint32_t now_ms,
     http.addHeader("Accept", "application/json");
 
     int status = http.GET();
+    Serial.printf("[bus] GET %s -> %d\n", url, status);
     if (status != 200) {
         char msg[32];
         snprintf(msg, sizeof(msg), "http %d", status);
@@ -54,6 +63,7 @@ bool BusArrivalsFetcher::fetch(const char* code, uint32_t now_ms,
     }
 
     int body_len = http.getSize();   // -1 if chunked
+    Serial.printf("[bus] content-length=%d (chunked if -1)\n", body_len);
     if (body_len > (int)bus_arrivals::kMaxResponseBytes) {
         setErr(out, "response too large");
         http.end();
@@ -72,7 +82,12 @@ bool BusArrivalsFetcher::fetch(const char* code, uint32_t now_ms,
         cap = bus_arrivals::kMaxResponseBytes + 1;
     }
     char* buf = (char*)ps_malloc(cap);
+    bool from_psram = (buf != nullptr);
     if (!buf) buf = (char*)malloc(cap);
+    Serial.printf("[bus] alloc %u bytes from %s -> %s\n",
+                  (unsigned)cap,
+                  from_psram ? "psram" : (buf ? "heap" : "(failed)"),
+                  buf ? "ok" : "OOM");
     if (!buf) {
         setErr(out, "oom");
         http.end();
@@ -110,10 +125,15 @@ bool BusArrivalsFetcher::fetch(const char* code, uint32_t now_ms,
         return false;
     }
 
+    Serial.printf("[bus] read %u bytes\n", (unsigned)pos);
     bool ok = bus_arrivals::parseBusArrivalsJson(buf, pos, out);
     free(buf);
-    if (!ok) return false;
+    if (!ok) {
+        Serial.printf("[bus] parse failed: %s\n", out.last_error);
+        return false;
+    }
 
+    Serial.printf("[bus] parse ok: %u services\n", (unsigned)out.service_count);
     out.fetched_at_ms          = now_ms;
     out.last_fetch_success_ms  = now_ms;
     return true;
