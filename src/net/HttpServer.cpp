@@ -689,7 +689,10 @@ void HttpServer::registerStaHandlers() {
 
     // ---- /api/settings (read)
     server_->on("/api/settings", HTTP_GET, [this]() {
-        char buf[768];
+        // 8 cards + 4 bus_stops grew the body past the original 768B.
+        // Defaults alone now serialise to ~730B; populated bus stops add
+        // ~10B per non-empty slot. Round to 1280B for comfortable headroom.
+        char buf[1280];
         size_t n = settings::toJson(settings_.data(), buf, sizeof(buf));
         if (n == 0) {
             sendJsonError(server_, 500, "settings JSON overflow");
