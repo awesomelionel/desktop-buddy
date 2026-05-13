@@ -265,9 +265,138 @@ void BusCard::renderCenterMessage(Adafruit_ST7789& tft,
     }
 }
 
-// Stub render-helper bodies for Task 11.
-void BusCard::renderRows(Adafruit_ST7789& /*tft*/, uint32_t /*now_ms*/) {}
-void BusCard::renderScrollHint(Adafruit_ST7789& /*tft*/, uint32_t /*now_ms*/) {}
+void BusCard::renderRows(Adafruit_ST7789& tft, uint32_t now_ms) {
+    const bool stale = (data_.last_error[0] != '\0');
+    const uint16_t fg = stale ? kColDim : kColFg;
+
+    uint8_t total = data_.service_count;
+    if (total == 0) { clearBody(tft); return; }
+
+    bool full_rows_repaint =
+        first_visible_ != last_drawn_first_visible_ ||
+        (last_drawn_state_ != DisplayState::Normal &&
+         last_drawn_state_ != DisplayState::Stale);
+
+    if (full_rows_repaint) {
+        clearBody(tft);
+    }
+
+    for (uint8_t i = 0; i < kViewportRows; ++i) {
+        int row_y = kBodyTopY + (int)i * kRowH;
+        uint8_t idx = (uint8_t)((first_visible_ + i) % (total > 0 ? total : 1));
+        if (i >= total) {
+            // Empty viewport slot: repaint to background.
+            tft.fillRect(0, row_y, kBodyW - kScrollW - 4, kRowH, kColBg);
+            last_drawn_[i] = {};
+            last_drawn_minute_[i] = INT32_MIN;
+            continue;
+        }
+
+        const auto& svc = data_.services[idx];
+        int minute = displayedMinute(now_ms, svc);
+
+        bool row_changed =
+            full_rows_repaint ||
+            strncmp(svc.service_no, last_drawn_[i].service_no,
+                    sizeof(svc.service_no)) != 0 ||
+            svc.load != last_drawn_[i].load ||
+            svc.type != last_drawn_[i].type;
+
+        bool minute_changed = minute != last_drawn_minute_[i];
+
+        if (row_changed) {
+            // Repaint the whole row band.
+            tft.fillRect(0, row_y, kBodyW - kScrollW - 4, kRowH, kColBg);
+
+            // Service number — size 2.
+            tft.setTextSize(2);
+            tft.setTextColor(fg, kColBg);
+            tft.setCursor(kCol_Service, row_y);
+            tft.print(svc.service_no);
+
+            // Load dot.
+            tft.fillCircle(kCol_Dot + 5, row_y + 7, 5, loadColor(svc.load));
+
+            // Load text.
+            tft.setTextSize(1);
+            tft.setTextColor(stale ? kColDim : loadColor(svc.load), kColBg);
+            tft.setCursor(kCol_Load, row_y + 4);
+            tft.print(loadLabel(svc.load));
+
+            // Type tag.
+            tft.setTextColor(stale ? kColDim : typeColor(svc.type), kColBg);
+            tft.setCursor(kCol_Type, row_y + 4);
+            tft.print(typeLabel(svc.type));
+
+            last_drawn_[i] = svc;
+        }
+
+        if (row_changed || minute_changed) {
+            // ETA cell only.
+            tft.fillRect(kCol_Eta, row_y, kEtaW, kRowH, kColBg);
+            tft.setTextSize(2);
+            if (minute == INT32_MIN) {
+                tft.setTextColor(kColDim, kColBg);
+                tft.setCursor(kCol_Eta, row_y);
+                tft.print("--");
+            } else if (minute <= 0) {
+                tft.setTextColor(kColEtaArr, kColBg);
+                tft.setCursor(kCol_Eta, row_y);
+                tft.print("Arr");
+            } else if (minute >= 60) {
+                tft.setTextColor(kColDim, kColBg);
+                tft.setCursor(kCol_Eta, row_y);
+                tft.print("60+");
+            } else {
+                tft.setTextColor(fg, kColBg);
+                char m[8];
+                snprintf(m, sizeof(m), "%dm", minute);
+                tft.setCursor(kCol_Eta, row_y);
+                tft.print(m);
+            }
+            last_drawn_minute_[i] = minute;
+        }
+    }
+
+    // Scroll bar.
+    if (total > kViewportRows) {
+        // Track.
+        tft.fillRect(kScrollX, kScrollY, kScrollW, kScrollH, kColBg);
+        tft.drawRect(kScrollX, kScrollY, kScrollW, kScrollH, kColDivider);
+        // Thumb.
+        int thumb_h = (kScrollH * (int)kViewportRows) / (int)total;
+        if (thumb_h < 4) thumb_h = 4;
+        int thumb_y = kScrollY + (kScrollH * (int)first_visible_) / (int)total;
+        tft.fillRect(kScrollX + 1, thumb_y + 1,
+                     kScrollW - 2, thumb_h - 2, kColFg);
+    } else {
+        tft.fillRect(kScrollX, kScrollY, kScrollW, kScrollH, kColBg);
+    }
+
+    last_drawn_first_visible_ = first_visible_;
+}
+
+void BusCard::renderScrollHint(Adafruit_ST7789& tft, uint32_t now_ms) {
+    if (data_.service_count <= kViewportRows) return;
+    if (first_visible_ != 0) return;
+    uint32_t shown_for = now_ms - shown_at_ms_;
+    if (shown_for >= kHintShowMs) {
+        // Erase the hint band on the bottom row if we previously drew it.
+        // (Safe to fillRect even if nothing was there — paints bg over bg.)
+        tft.fillRect(0, 135 - 10, 240, 10, kColBg);
+        return;
+    }
+    tft.setTextSize(1);
+    tft.setTextColor(kColDim, kColBg);
+    const char* hint = "press [O] to scroll";
+    int16_t x1, y1; uint16_t w1, h1;
+    tft.getTextBounds(hint, 0, 0, &x1, &y1, &w1, &h1);
+    int x = (240 - (int)w1) / 2;
+    tft.setCursor(x, 135 - 9);
+    tft.print(hint);
+    // Stay dirty so we re-render and erase the hint after kHintShowMs.
+    dirty_ = true;
+}
 
 void BusCard::render(Display& display) {
     Adafruit_ST7789& tft = display.tft();
