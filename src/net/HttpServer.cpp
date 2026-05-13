@@ -786,6 +786,31 @@ void HttpServer::registerStaHandlers() {
         sendJsonOk(server_);
     });
 
+    // ---- /api/settings/bus-stops
+    server_->on("/api/settings/bus-stops", HTTP_POST, [this]() {
+        if (!server_->hasArg("slot")) {
+            sendJsonError(server_, 400, "missing field");
+            return;
+        }
+        long slot_long = server_->arg("slot").toInt();
+        if (slot_long < 0 || slot_long >= settings::MAX_BUS_STOPS) {
+            sendJsonError(server_, 400, "slot out of range");
+            return;
+        }
+        // code and label are both accepted as optional in the form payload
+        // (treat missing as empty). The settings layer validates contents.
+        String code  = server_->hasArg("code")  ? server_->arg("code")  : String("");
+        String label = server_->hasArg("label") ? server_->arg("label") : String("");
+        char err[64] = {};
+        if (!settings_.applyBusStop(static_cast<uint8_t>(slot_long),
+                                    code.c_str(), label.c_str(),
+                                    err, sizeof(err))) {
+            sendJsonError(server_, 400, err);
+            return;
+        }
+        sendJsonOk(server_);
+    });
+
     // ---- /api/settings/network (also reachable in AP mode)
     server_->on("/api/settings/network", HTTP_POST, [this]() {
         handleSaveNetwork(server_, config_);
