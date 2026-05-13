@@ -22,6 +22,9 @@ void test_apply_backlight_ok(void);
 void test_apply_backlight_bad_pct_rejected(void);
 void test_tojson_includes_backlight(void);
 
+// Defined in test_settings_daily_cap.cpp
+void test_daily_cap_default_zero(void);
+
 using namespace settings;
 
 void setUp(void) {}
@@ -202,5 +205,6 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_apply_backlight_ok);
     RUN_TEST(test_apply_backlight_bad_pct_rejected);
     RUN_TEST(test_tojson_includes_backlight);
+    RUN_TEST(test_daily_cap_default_zero);
     return UNITY_END();
 }

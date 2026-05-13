@@ -148,6 +148,7 @@ void setDefaults(Settings& s, const char* default_name) {
     s.dim_timeout_s     = 30;
     s.dim_level_pct     = 40;
     s.full_level_pct    = 100;
+    s.daily_token_cap   = 0;
     // All except NavTest enabled by default.
     s.cards_enabled_mask = (1u << CARD_STATUS) | (1u << CARD_EYES) | (1u << CARD_WIFI);
     s.cards_order[0]    = CARD_STATUS;
