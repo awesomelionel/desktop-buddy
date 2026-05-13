@@ -254,6 +254,14 @@ bool applyBacklightFields(Settings& s,
     return true;
 }
 
+bool applyDailyCapField(Settings& s,
+                        uint32_t daily_token_cap,
+                        char* error, size_t error_len) {
+    if (!isValidDailyTokenCap(daily_token_cap, error, error_len)) return false;
+    s.daily_token_cap = daily_token_cap;
+    return true;
+}
+
 const char* cardName(CardId id) {
     switch (id) {
         case CARD_STATUS:  return "Status";
@@ -276,6 +284,7 @@ size_t toJson(const Settings& s, char* buf, size_t buf_len) {
         "\"dim_timeout_s\":%u,"
         "\"dim_level_pct\":%u,"
         "\"full_level_pct\":%u,"
+        "\"daily_token_cap\":%u,"
         "\"boot_card_id\":%u,"
         "\"cards\":[",
         s.device_name,
@@ -284,6 +293,7 @@ size_t toJson(const Settings& s, char* buf, size_t buf_len) {
         (unsigned)s.dim_timeout_s,
         (unsigned)s.dim_level_pct,
         (unsigned)s.full_level_pct,
+        (unsigned)s.daily_token_cap,
         (unsigned)s.boot_card_id);
     if (written < 0 || (size_t)written >= buf_len) return 0;
     size_t pos = (size_t)written;

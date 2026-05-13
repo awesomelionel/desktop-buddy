@@ -75,13 +75,20 @@ bool applyBacklightFields(Settings& s,
                           uint8_t  full_level_pct,
                           char* error, size_t error_len);
 
+// Patch with a new daily_token_cap value. Validates per the same rule as
+// validate(). Returns true on success; false leaves s unchanged and
+// writes the reason into error.
+bool applyDailyCapField(Settings& s,
+                        uint32_t daily_token_cap,
+                        char* error, size_t error_len);
+
 // Render Settings as a single JSON object into buf. Returns the number of
 // chars written (excluding null), or 0 if buf_len is too small.
 //
 // Shape:
 //   {"device_name":"...","live_timeout_s":N,"sleep_timeout_s":N,
 //    "dim_timeout_s":N,"dim_level_pct":N,"full_level_pct":N,
-//    "boot_card_id":N,
+//    "daily_token_cap":N,"boot_card_id":N,
 //    "cards":[{"id":N,"name":"...","enabled":bool,"order":N}, ...]}
 size_t toJson(const Settings& s, char* buf, size_t buf_len);
 

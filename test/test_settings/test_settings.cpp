@@ -28,6 +28,9 @@ void test_daily_cap_zero_accepted(void);
 void test_daily_cap_in_range_accepted(void);
 void test_daily_cap_at_max_accepted(void);
 void test_daily_cap_over_max_rejected(void);
+void test_apply_daily_cap_ok(void);
+void test_apply_daily_cap_rejects_over_max(void);
+void test_tojson_includes_daily_cap(void);
 
 using namespace settings;
 
@@ -214,5 +217,8 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_daily_cap_in_range_accepted);
     RUN_TEST(test_daily_cap_at_max_accepted);
     RUN_TEST(test_daily_cap_over_max_rejected);
+    RUN_TEST(test_apply_daily_cap_ok);
+    RUN_TEST(test_apply_daily_cap_rejects_over_max);
+    RUN_TEST(test_tojson_includes_daily_cap);
     return UNITY_END();
 }

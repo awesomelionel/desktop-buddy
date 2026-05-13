@@ -43,3 +43,29 @@ void test_daily_cap_over_max_rejected(void) {
     TEST_ASSERT_FALSE(validate(s, err, sizeof(err)));
     TEST_ASSERT_TRUE(strstr(err, "daily_token_cap") != nullptr);
 }
+
+void test_apply_daily_cap_ok(void) {
+    Settings s = make_defaults_cap();
+    char err[64] = {};
+    TEST_ASSERT_TRUE(applyDailyCapField(s, 250000u, err, sizeof(err)));
+    TEST_ASSERT_EQUAL_UINT32(250000u, s.daily_token_cap);
+}
+
+void test_apply_daily_cap_rejects_over_max(void) {
+    Settings s = make_defaults_cap();
+    s.daily_token_cap = 1234u;
+    char err[64] = {};
+    TEST_ASSERT_FALSE(applyDailyCapField(s, DAILY_TOKEN_CAP_MAX + 1u,
+                                          err, sizeof(err)));
+    // Unchanged on failure.
+    TEST_ASSERT_EQUAL_UINT32(1234u, s.daily_token_cap);
+}
+
+void test_tojson_includes_daily_cap(void) {
+    Settings s = make_defaults_cap();
+    s.daily_token_cap = 12345u;
+    char buf[1024] = {};
+    size_t n = toJson(s, buf, sizeof(buf));
+    TEST_ASSERT_NOT_EQUAL(0, n);
+    TEST_ASSERT_TRUE(strstr(buf, "\"daily_token_cap\":12345") != nullptr);
+}
