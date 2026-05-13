@@ -34,3 +34,12 @@ struct ClaudeStatus {
 // successive partial snapshots accumulate. Returns false if the line isn't
 // a JSON object, json fails to parse, or `line`/`out` is null.
 bool protocol_parse_line(const char* line, ClaudeStatus* out);
+
+// Synthesize a ClaudeUsage from a (used, cap) pair when the bridge hasn't
+// supplied a usage object. cap == 0 leaves *out with valid=false (caller
+// should keep using legacy display). used > cap is permitted — remaining
+// clamps to 0 and the caller's percent helper clamps the bar to 100.
+// *out is overwritten in full when cap != 0.
+void protocol_synthesize_usage_from_cap(uint32_t used,
+                                        uint32_t cap,
+                                        ClaudeUsage* out);

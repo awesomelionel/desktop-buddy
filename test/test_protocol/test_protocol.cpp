@@ -211,6 +211,34 @@ static void test_parse_usage_missing_keeps_previous(void) {
     TEST_ASSERT_EQUAL_UINT32(22u, s.usage.remaining);
 }
 
+static void test_synthesize_usage_disabled_when_cap_zero(void) {
+    ClaudeUsage u = {};
+    protocol_synthesize_usage_from_cap(/*used*/ 12000u, /*cap*/ 0u, &u);
+    TEST_ASSERT_FALSE(u.valid);
+}
+
+static void test_synthesize_usage_fabricates_when_cap_set(void) {
+    ClaudeUsage u = {};
+    protocol_synthesize_usage_from_cap(/*used*/ 25000u, /*cap*/ 100000u, &u);
+    TEST_ASSERT_TRUE(u.valid);
+    TEST_ASSERT_EQUAL_UINT32(25000u,  u.used);
+    TEST_ASSERT_EQUAL_UINT32(100000u, u.limit);
+    TEST_ASSERT_EQUAL_UINT32(75000u,  u.remaining);
+    TEST_ASSERT_TRUE(u.has_limit);
+    TEST_ASSERT_FALSE(u.has_remaining);
+}
+
+static void test_synthesize_usage_clamps_overflow(void) {
+    // tokens_today > cap is valid — remaining clamps to 0 and the renderer's
+    // usagePercent helper clamps the bar to 100.
+    ClaudeUsage u = {};
+    protocol_synthesize_usage_from_cap(/*used*/ 150000u, /*cap*/ 100000u, &u);
+    TEST_ASSERT_TRUE(u.valid);
+    TEST_ASSERT_EQUAL_UINT32(150000u, u.used);
+    TEST_ASSERT_EQUAL_UINT32(100000u, u.limit);
+    TEST_ASSERT_EQUAL_UINT32(0u, u.remaining);
+}
+
 static void test_parse_usage_malformed_remaining_keeps_previous(void) {
     ClaudeStatus s = {};
     s.usage.valid = true;
@@ -248,5 +276,8 @@ int main(int, char**) {
     RUN_TEST(test_parse_usage_zero_remaining_is_honoured);
     RUN_TEST(test_parse_usage_missing_keeps_previous);
     RUN_TEST(test_parse_usage_malformed_remaining_keeps_previous);
+    RUN_TEST(test_synthesize_usage_disabled_when_cap_zero);
+    RUN_TEST(test_synthesize_usage_fabricates_when_cap_set);
+    RUN_TEST(test_synthesize_usage_clamps_overflow);
     return UNITY_END();
 }

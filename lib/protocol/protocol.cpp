@@ -95,3 +95,19 @@ bool protocol_parse_line(const char* line, ClaudeStatus* out) {
     out->valid = true;
     return true;
 }
+
+void protocol_synthesize_usage_from_cap(uint32_t used,
+                                        uint32_t cap,
+                                        ClaudeUsage* out) {
+    if (!out) return;
+    if (cap == 0) {
+        out->valid = false;
+        return;
+    }
+    out->used          = used;
+    out->limit         = cap;
+    out->has_limit     = true;
+    out->has_remaining = false;
+    out->remaining     = (cap >= used) ? (cap - used) : 0;
+    out->valid         = true;
+}
