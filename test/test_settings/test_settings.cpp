@@ -24,6 +24,10 @@ void test_tojson_includes_backlight(void);
 
 // Defined in test_settings_daily_cap.cpp
 void test_daily_cap_default_zero(void);
+void test_daily_cap_zero_accepted(void);
+void test_daily_cap_in_range_accepted(void);
+void test_daily_cap_at_max_accepted(void);
+void test_daily_cap_over_max_rejected(void);
 
 using namespace settings;
 
@@ -206,5 +210,9 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_apply_backlight_bad_pct_rejected);
     RUN_TEST(test_tojson_includes_backlight);
     RUN_TEST(test_daily_cap_default_zero);
+    RUN_TEST(test_daily_cap_zero_accepted);
+    RUN_TEST(test_daily_cap_in_range_accepted);
+    RUN_TEST(test_daily_cap_at_max_accepted);
+    RUN_TEST(test_daily_cap_over_max_rejected);
     return UNITY_END();
 }

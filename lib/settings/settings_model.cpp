@@ -80,6 +80,15 @@ bool isValidFullLevelPct(uint8_t v, char* error, size_t error_len) {
     return true;
 }
 
+bool isValidDailyTokenCap(uint32_t v, char* error, size_t error_len) {
+    if (v > DAILY_TOKEN_CAP_MAX) {
+        writeError(error, error_len,
+                   "daily_token_cap out of range (0..100000000)");
+        return false;
+    }
+    return true;
+}
+
 bool isValidDimVsSleep(uint16_t dim_s, uint16_t sleep_s,
                        char* error, size_t error_len) {
     // Constraint applies only when both are non-zero.
@@ -166,6 +175,7 @@ bool validate(const Settings& s, char* error, size_t error_len) {
     if (!isValidDimTimeout(s.dim_timeout_s, error, error_len)) return false;
     if (!isValidDimLevelPct(s.dim_level_pct, error, error_len)) return false;
     if (!isValidFullLevelPct(s.full_level_pct, error, error_len)) return false;
+    if (!isValidDailyTokenCap(s.daily_token_cap, error, error_len)) return false;
     if (!isValidDimVsSleep(s.dim_timeout_s, s.sleep_timeout_s,
                            error, error_len)) return false;
     if (!isValidCards(s.cards_enabled_mask, s.cards_order, s.cards_order_count,
