@@ -13,6 +13,13 @@
 #include "../core/firmware_version.h"
 #include "WifiManager.h"
 
+// Bus arrivals card preview PNG, embedded via board_build.embed_files.
+// Served at /img/bus-card.png and shown in the Bus stops settings section.
+extern const uint8_t bus_card_png_start[]
+    asm("_binary_data_bus_card_mockup_png_start");
+extern const uint8_t bus_card_png_end[]
+    asm("_binary_data_bus_card_mockup_png_end");
+
 namespace {
 constexpr uint16_t HTTP_PORT = 80;
 constexpr uint8_t  DNS_PORT  = 53;
@@ -350,6 +357,31 @@ void HttpServer::registerStaHandlers() {
             // -------- BUS STOPS --------
             "<div class=section>"
               "<h2>Bus stops</h2>"
+              "<p class=tip>Each saved stop becomes its own card on the "
+                "device, showing the next bus for every service at that "
+                "stop.</p>"
+              "<img src=/img/bus-card.png alt='Bus arrivals card preview' "
+                "style='width:100%;max-width:360px;display:block;"
+                "border-radius:6px 6px 0 0;margin:.2rem 0 0'>"
+              // Legend sits on a black block under the screenshot so the
+              // on-device colours render truthfully (they'd be invisible
+              // on the light panel background).
+              "<div style='background:#000;color:#bbb;font-size:.82rem;"
+                "line-height:1.85;padding:.5rem .7rem;border-radius:0 0 6px 6px;"
+                "margin:0 0 .9rem;max-width:360px'>"
+                "<b style='color:#fff'>Each row:</b> service no. &middot; "
+                  "load &middot; ETA &middot; bus type<br>"
+                "<b style='color:#fff'>Load:</b> "
+                "<span style='color:#0f0'>&#9679;</span> seats &nbsp;"
+                "<span style='color:#ffa600'>&#9679;</span> standing &nbsp;"
+                "<span style='color:#f00'>&#9679;</span> limited standing<br>"
+                "<b style='color:#fff'>Type:</b> "
+                "<span style='color:#0ff'>DD</span> double-deck &nbsp;"
+                "<span style='color:#c5c2c5'>SD</span> single-deck &nbsp;"
+                "<span style='color:#f0f'>BD</span> bendy<br>"
+                "<b style='color:#fff'>ETA:</b> minutes to arrival; "
+                "<span style='color:#ff0'>Arr</span> = arriving now"
+              "</div>"
               "<form id=bus-form onsubmit='return saveBusStops(event)'>"
                 "<table class=bus-tbl style='width:100%;border-spacing:0 .4rem'>"
                   "<thead><tr style='text-align:left;font-size:.8rem;color:var(--muted)'>"
@@ -856,6 +888,13 @@ void HttpServer::registerStaHandlers() {
             return;
         }
         sendJsonOk(server_);
+    });
+
+    // ---- /img/bus-card.png (preview shown in the Bus stops section)
+    server_->on("/img/bus-card.png", HTTP_GET, [this]() {
+        const size_t len = bus_card_png_end - bus_card_png_start;
+        server_->send_P(200, "image/png",
+                        reinterpret_cast<const char*>(bus_card_png_start), len);
     });
 
     // ---- /api/settings/network (also reachable in AP mode)
