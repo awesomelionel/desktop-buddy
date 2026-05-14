@@ -8,15 +8,15 @@ namespace settings {
 // Card identity. Stable across versions — adding a card is fine, but
 // renumbering existing entries would silently re-map persisted prefs.
 enum CardId : uint8_t {
-    CARD_STATUS  = 0,
-    CARD_EYES    = 1,
-    CARD_WIFI    = 2,
-    CARD_NAVTEST = 3,
-    CARD_BUS_1   = 4,
-    CARD_BUS_2   = 5,
-    CARD_BUS_3   = 6,
-    CARD_BUS_4   = 7,
-    CARD_COUNT   = 8,  // sentinel; not a real card
+    CARD_STATUS     = 0,
+    CARD_EYES       = 1,
+    CARD_WIFI       = 2,
+    CARD_RESERVED_3 = 3,  // retired NavTest card; id kept as a hole for NVS stability
+    CARD_BUS_1      = 4,
+    CARD_BUS_2      = 5,
+    CARD_BUS_3      = 6,
+    CARD_BUS_4      = 7,
+    CARD_COUNT      = 8,  // sentinel; not a real card
 };
 
 constexpr uint8_t  MAX_DEVICE_NAME_LEN = 15;   // not counting null

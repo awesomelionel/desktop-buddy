@@ -180,11 +180,12 @@ static void test_to_json_contains_expected_keys(void) {
     TEST_ASSERT_TRUE(strstr(buf, "\"live_timeout_s\":30") != nullptr);
     TEST_ASSERT_TRUE(strstr(buf, "\"sleep_timeout_s\":0") != nullptr);
     TEST_ASSERT_TRUE(strstr(buf, "\"boot_card_id\":0") != nullptr);
-    // Cards array contains all four with stable IDs
+    // Cards array contains the real cards with stable IDs
     TEST_ASSERT_TRUE(strstr(buf, "\"name\":\"Status\"") != nullptr);
-    TEST_ASSERT_TRUE(strstr(buf, "\"name\":\"NavTest\"") != nullptr);
-    // NavTest is disabled in defaults
-    TEST_ASSERT_TRUE(strstr(buf, "\"name\":\"NavTest\",\"enabled\":false") != nullptr);
+    TEST_ASSERT_TRUE(strstr(buf, "\"name\":\"Eyes\"") != nullptr);
+    TEST_ASSERT_TRUE(strstr(buf, "\"name\":\"Wifi\"") != nullptr);
+    // The retired NavTest slot (id 3) is skipped entirely, not emitted.
+    TEST_ASSERT_TRUE(strstr(buf, "NavTest") == nullptr);
 }
 
 static void test_to_json_buffer_too_small_returns_zero(void) {

@@ -11,9 +11,7 @@
 
 CardController::CardController(AppState& app, EventBus& bus, WifiManager& wifi,
                                PromptUi& prompt, BleLink& ble, Settings& settings,
-                               UpdateManager& um, FactoryResetCoordinator& fr,
-                               int pin_btn_next, uint8_t btn_next_pressed_level,
-                               int pin_btn_prev, uint8_t btn_prev_pressed_level)
+                               UpdateManager& um, FactoryResetCoordinator& fr)
     : app_(app), bus_(bus), wifi_(wifi), prompt_(prompt), ble_(ble),
       settings_(settings),
       um_(um),
@@ -21,8 +19,6 @@ CardController::CardController(AppState& app, EventBus& bus, WifiManager& wifi,
       status_card_(app, prompt),
       eyes_card_(app, prompt),
       wifi_card_(wifi),
-      nav_card_(pin_btn_next, btn_next_pressed_level,
-                pin_btn_prev, btn_prev_pressed_level),
       prompt_card_(prompt),
       updating_card_(um),
       factory_reset_card_(fr),
@@ -73,13 +69,11 @@ void CardController::begin() {
 }
 
 namespace {
-Card* cardForIdLegacy(uint8_t id, StatusCard& s, EyesCard& e,
-                      WifiCard& w, NavTestCard& n) {
+Card* cardForIdLegacy(uint8_t id, StatusCard& s, EyesCard& e, WifiCard& w) {
     switch (id) {
-        case settings::CARD_STATUS:  return &s;
-        case settings::CARD_EYES:    return &e;
-        case settings::CARD_WIFI:    return &w;
-        case settings::CARD_NAVTEST: return &n;
+        case settings::CARD_STATUS: return &s;
+        case settings::CARD_EYES:   return &e;
+        case settings::CARD_WIFI:   return &w;
     }
     return nullptr;
 }
@@ -98,7 +92,7 @@ void CardController::rebuildStack() {
 
     auto cardFor = [this, &d](uint8_t id) -> Card* {
         Card* legacy = cardForIdLegacy(id, status_card_, eyes_card_,
-                                        wifi_card_, nav_card_);
+                                        wifi_card_);
         if (legacy) return legacy;
         if (id >= settings::CARD_BUS_1 && id <= settings::CARD_BUS_4) {
             uint8_t slot = id - settings::CARD_BUS_1;

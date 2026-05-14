@@ -13,7 +13,6 @@
 #include "cards/BusCard.h"
 #include "cards/EyesCard.h"
 #include "cards/FactoryResetCard.h"
-#include "cards/NavTestCard.h"
 #include "cards/PromptCard.h"
 #include "cards/StatusCard.h"
 #include "cards/UpdatingCard.h"
@@ -32,9 +31,7 @@ class CardController {
 public:
     CardController(AppState& app, EventBus& bus, WifiManager& wifi,
                    PromptUi& prompt, BleLink& ble, Settings& settings,
-                   UpdateManager& um, FactoryResetCoordinator& fr,
-                   int pin_btn_next, uint8_t btn_next_pressed_level,
-                   int pin_btn_prev, uint8_t btn_prev_pressed_level);
+                   UpdateManager& um, FactoryResetCoordinator& fr);
 
     // The sleep manager queries last-input time through the router; bind
     // after construction so the InputRouter (which needs stack()) can be
@@ -65,7 +62,6 @@ private:
     StatusCard       status_card_;
     EyesCard         eyes_card_;
     WifiCard         wifi_card_;
-    NavTestCard      nav_card_;
     PromptCard       prompt_card_;
     UpdatingCard     updating_card_;
     FactoryResetCard factory_reset_card_;

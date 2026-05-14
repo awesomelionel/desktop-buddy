@@ -200,7 +200,7 @@ void setDefaults(Settings& s, const char* default_name) {
     s.dim_level_pct     = 40;
     s.full_level_pct    = 100;
     s.daily_token_cap   = 0;
-    // All except NavTest enabled by default.
+    // Status, Eyes, Wifi enabled by default.
     s.cards_enabled_mask = (1u << CARD_STATUS) | (1u << CARD_EYES) | (1u << CARD_WIFI);
     s.cards_order[0]    = CARD_STATUS;
     s.cards_order[1]    = CARD_EYES;
@@ -381,7 +381,7 @@ const char* cardName(CardId id) {
         case CARD_STATUS:  return "Status";
         case CARD_EYES:    return "Eyes";
         case CARD_WIFI:    return "Wifi";
-        case CARD_NAVTEST: return "NavTest";
+        case CARD_RESERVED_3: return "?";
         case CARD_BUS_1:   return "Bus 1";
         case CARD_BUS_2:   return "Bus 2";
         case CARD_BUS_3:   return "Bus 3";
@@ -421,6 +421,7 @@ size_t toJson(const Settings& s, char* buf, size_t buf_len) {
     // cards_order if present, else null.
     bool first = true;
     for (uint8_t id = 0; id < CARD_COUNT; ++id) {
+        if (id == CARD_RESERVED_3) continue;   // retired card slot; not a real card
         bool enabled = (s.cards_enabled_mask & (1u << id)) != 0;
         // Find position in order, if any.
         int pos_in_order = -1;
