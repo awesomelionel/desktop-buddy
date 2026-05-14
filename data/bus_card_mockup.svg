@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 135" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace" font-weight="bold">
+<rect width="240" height="135" fill="#000000"/>
+<text x="8" y="11" font-size="9" fill="#ffffff" textLength="60" lengthAdjust="spacing">Downstairs</text>
+<rect x="0" y="14" width="240" height="1" fill="#3a3d3a"/>
+<text x="8" y="33" font-size="17" fill="#ffffff" textLength="24" lengthAdjust="spacing">13</text>
+<circle cx="77" cy="27" r="5" fill="#00ff00"/>
+<text x="110" y="33" font-size="17" fill="#ffffff" textLength="24" lengthAdjust="spacing">2m</text>
+<text x="210" y="33" font-size="17" fill="#00ffff" textLength="24" lengthAdjust="spacing">DD</text>
+<text x="8" y="52" font-size="17" fill="#ffffff" textLength="24" lengthAdjust="spacing">52</text>
+<circle cx="77" cy="46" r="5" fill="#00ff00"/>
+<text x="110" y="52" font-size="17" fill="#ffff00" textLength="36" lengthAdjust="spacing">Arr</text>
+<text x="210" y="52" font-size="17" fill="#c5c2c5" textLength="24" lengthAdjust="spacing">SD</text>
+<text x="8" y="71" font-size="17" fill="#ffffff" textLength="24" lengthAdjust="spacing">54</text>
+<circle cx="77" cy="65" r="5" fill="#00ff00"/>
+<text x="110" y="71" font-size="17" fill="#ffffff" textLength="24" lengthAdjust="spacing">3m</text>
+<text x="210" y="71" font-size="17" fill="#c5c2c5" textLength="24" lengthAdjust="spacing">SD</text>
+<text x="8" y="90" font-size="17" fill="#ffffff" textLength="24" lengthAdjust="spacing">88</text>
+<circle cx="77" cy="84" r="5" fill="#00ff00"/>
+<text x="110" y="90" font-size="17" fill="#ffffff" textLength="24" lengthAdjust="spacing">2m</text>
+<text x="210" y="90" font-size="17" fill="#00ffff" textLength="24" lengthAdjust="spacing">DD</text>
+<text x="8" y="109" font-size="17" fill="#ffffff" textLength="36" lengthAdjust="spacing">162</text>
+<circle cx="77" cy="103" r="5" fill="#00ff00"/>
+<text x="110" y="109" font-size="17" fill="#ffffff" textLength="36" lengthAdjust="spacing">16m</text>
+<text x="210" y="109" font-size="17" fill="#c5c2c5" textLength="24" lengthAdjust="spacing">SD</text>
+<text x="8" y="128" font-size="17" fill="#ffffff" textLength="48" lengthAdjust="spacing">410G</text>
+<circle cx="77" cy="122" r="5" fill="#00ff00"/>
+<text x="110" y="128" font-size="17" fill="#ffffff" textLength="24" lengthAdjust="spacing">7m</text>
+<text x="210" y="128" font-size="17" fill="#c5c2c5" textLength="24" lengthAdjust="spacing">SD</text>
+</svg>

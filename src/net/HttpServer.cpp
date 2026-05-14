@@ -13,12 +13,12 @@
 #include "../core/firmware_version.h"
 #include "WifiManager.h"
 
-// Bus arrivals card preview PNG, embedded via board_build.embed_files.
-// Served at /img/bus-card.png and shown in the Bus stops settings section.
-extern const uint8_t bus_card_png_start[]
-    asm("_binary_data_bus_card_mockup_png_start");
-extern const uint8_t bus_card_png_end[]
-    asm("_binary_data_bus_card_mockup_png_end");
+// Bus arrivals card preview (SVG), embedded via board_build.embed_files.
+// Served at /img/bus-card.svg and shown in the Bus stops settings section.
+extern const uint8_t bus_card_svg_start[]
+    asm("_binary_data_bus_card_mockup_svg_start");
+extern const uint8_t bus_card_svg_end[]
+    asm("_binary_data_bus_card_mockup_svg_end");
 
 namespace {
 constexpr uint16_t HTTP_PORT = 80;
@@ -360,7 +360,7 @@ void HttpServer::registerStaHandlers() {
               "<p class=tip>Each saved stop becomes its own card on the "
                 "device, showing the next bus for every service at that "
                 "stop.</p>"
-              "<img src=/img/bus-card.png alt='Bus arrivals card preview' "
+              "<img src=/img/bus-card.svg alt='Bus arrivals card preview' "
                 "style='width:100%;max-width:360px;display:block;"
                 "border-radius:6px 6px 0 0;margin:.2rem 0 0'>"
               // Legend sits on a black block under the screenshot so the
@@ -890,11 +890,11 @@ void HttpServer::registerStaHandlers() {
         sendJsonOk(server_);
     });
 
-    // ---- /img/bus-card.png (preview shown in the Bus stops section)
-    server_->on("/img/bus-card.png", HTTP_GET, [this]() {
-        const size_t len = bus_card_png_end - bus_card_png_start;
-        server_->send_P(200, "image/png",
-                        reinterpret_cast<const char*>(bus_card_png_start), len);
+    // ---- /img/bus-card.svg (preview shown in the Bus stops section)
+    server_->on("/img/bus-card.svg", HTTP_GET, [this]() {
+        const size_t len = bus_card_svg_end - bus_card_svg_start;
+        server_->send_P(200, "image/svg+xml",
+                        reinterpret_cast<const char*>(bus_card_svg_start), len);
     });
 
     // ---- /api/settings/network (also reachable in AP mode)
