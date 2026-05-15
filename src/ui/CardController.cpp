@@ -238,7 +238,11 @@ void CardController::tick(uint32_t now_ms, Display& display) {
     }
     if (cur_index != preload_done_for_index_ &&
         (now_ms - last_card_change_ms_) >= kPreloadDebounceMs &&
-        stack_.size() > 1) {
+        stack_.size() > 1 &&
+        wifi_.isConnected()) {                       // skip if Wi-Fi not up; the
+                                                     // worker would only stage an
+                                                     // error result the BusCard
+                                                     // would briefly show on flip.
         preloadNeighbour((cur_index + stack_.size() - 1) % stack_.size());
         preloadNeighbour((cur_index + 1) % stack_.size());
         preload_done_for_index_ = cur_index;

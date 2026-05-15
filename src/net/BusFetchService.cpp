@@ -7,8 +7,15 @@ namespace net {
 
 namespace {
 constexpr uint32_t kWorkerStackBytes = 10 * 1024;
-constexpr UBaseType_t kWorkerPriority = 5;   // sits between idle (0) and Arduino loop (1) + sensor work
-constexpr const char* kWorkerName = "bus_fetch";
+// Match the Arduino loopTask priority (1). Anything higher preempts the
+// main loop during a fetch — which starves input polling, the card stack
+// tick, and the display, causing visible UI freezes and dropped button
+// presses. Equal priority gives cooperative time-slicing instead.
+constexpr UBaseType_t kWorkerPriority = 1;
+// Pin to core 0 so the worker never shares a core with the Arduino loop
+// (which runs on core 1 by default), eliminating preemption entirely.
+constexpr BaseType_t  kWorkerCore     = 0;
+constexpr const char* kWorkerName     = "bus_fetch";
 }  // namespace
 
 BusFetchService::BusFetchService()
@@ -42,12 +49,13 @@ bool BusFetchService::begin() {
         return false;
     }
 
-    BaseType_t ok = xTaskCreate(&BusFetchService::workerEntry,
-                                kWorkerName,
-                                kWorkerStackBytes / sizeof(StackType_t),
-                                this,
-                                kWorkerPriority,
-                                &task_);
+    BaseType_t ok = xTaskCreatePinnedToCore(&BusFetchService::workerEntry,
+                                            kWorkerName,
+                                            kWorkerStackBytes / sizeof(StackType_t),
+                                            this,
+                                            kWorkerPriority,
+                                            &task_,
+                                            kWorkerCore);
     if (ok != pdPASS) {
         Serial.println("[bus] xTaskCreate failed; sync fallback");
         async_ = false;
