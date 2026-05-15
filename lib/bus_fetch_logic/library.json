@@ -1,0 +1,7 @@
+{
+  "name": "bus_fetch_logic",
+  "version": "0.1.0",
+  "description": "Pure-C++ slot-request table logic for the bus fetch service.",
+  "frameworks": "*",
+  "platforms": "*"
+}
